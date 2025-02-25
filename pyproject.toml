@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "CalData's DSA project with DWR"
 authors = ["Monica Bobra <monica.bobra@innovation.ca.gov>"]
 readme = "README.md"
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "~3.10"
@@ -12,6 +13,11 @@ pandas = "^2.2.3"
 numpy = "^2.2.0"
 matplotlib = "^3.10.0"
 jupyterlab = "^4.3.3"
+shiny = "^1.2"
+shinyswatch = "^0.8"
+shinywidgets = "^0.5"
+plotly = "^6.0"
+dateparser = "^1.2"
 seaborn = "^0.13.2"
 
 
