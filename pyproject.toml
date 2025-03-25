@@ -16,7 +16,7 @@ jupyterlab = "^4.3.3"
 shiny = "^1.2"
 shinyswatch = "^0.8"
 shinywidgets = "^0.5"
-plotly = "^6.0"
+plotly = "5.24"
 dateparser = "^1.2"
 
 
