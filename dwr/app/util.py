@@ -1,48 +1,39 @@
 # misc functions
+import html
 import dateutil
 import dateparser
+from functools import wraps
 
 import pandas as pd
 from pandas.api.types import is_numeric_dtype
+
 import shiny
+from shiny import ui
 
-def get_date_cols(df):
-    ret = []
-    for col in df.columns:
-        if 'date' in col.lower():
-            ret.append(col)
-            continue
-        # TODO: call try_parse_date on other columns
+LOG_MSG = 0
 
-    return ret
-
-
-def get_num_cols(df):
-    return [col for col in df.columns if is_numeric_dtype(df[col])]
+# TODO: increase level as call stack grows in depth
+def print_func_name(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        jlog(f'{func.__name__}')
+        return func(*args, **kwargs)
+    return wrapper
 
 
-# TODO: maybe consider allowing user to pass format string
-def try_parse_date(value, strict=False):
-    # Attempt #1
-    try:
-        parsed = dateutil.parser.parse(value)
-        return parsed
-    except dateutil.parser._parser.ParserError:
-        pass
+def jlog(msg, level=0):
+    print(f'JLO: {chr(9)*level}{msg}')
 
-    # Attempt #2
-    if parsed := dateparser.parse(value):
-        return parsed
-
-    # Give up
-    if strict:
-        return None
-    return value
+    global LOG_MSG
+    LOG_MSG += 1
+    if LOG_MSG > 500:
+        raise RuntimeError('something has gone wrong')
 
 
-# Help identify columns that are the result of running outlier detection
-def get_od_name(column_name):
-    return f'{column_name}_is_outlier'
+def jlog1(msg):
+    return jlog(msg, level=1)
+def jlog2(msg):
+    return jlog(msg, level=2)
 
 
 # This serves 2 purposes:
@@ -56,3 +47,17 @@ def req(variable, output_fn=print):
 
     shiny.req(cond)
     output_fn(f'req passed')
+
+
+def to_html_list(items):
+    list_items = ''.join(f'<li>{html.escape(item)}</li>' for item in items)
+    return f'<ul>{list_items}</ul>'
+
+
+# Returns the name of index in the input series with the first True value, or
+# None if none are True.
+def get_first_true_column_name(row: pd.Series) -> str:
+    if row.sum() > 0:
+        return row.idxmax()
+    else:
+        return 'pass'
