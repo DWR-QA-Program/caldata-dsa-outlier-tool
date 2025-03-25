@@ -1,4 +1,4 @@
-import util
+import upload_util
 
 # Tracks the state of a user's session
 class State():
@@ -7,6 +7,7 @@ class State():
 
     def add_file(self, fname, df):
         self.files[fname] = File(fname, df)
+        return self.get_file(fname).date_cols, self.get_file(fname).num_cols
 
     def get_file(self, fname):
         return self.files[fname]
@@ -21,12 +22,11 @@ class File():
         self.name = name
         self.df = df
 
-        cols = list(self.df.columns)
-        self.date_cols = util.get_date_cols(self.df)
-        self.num_cols = util.get_num_cols(self.df)
+        self.date_cols = upload_util.get_date_cols(self.df)
+        self.num_cols = upload_util.get_num_cols(self.df)
 
         for col in self.date_cols:
-            self.df[col] = self.df[col].apply(util.try_parse_date)
+            self.df[col] = self.df[col].apply(upload_util.try_parse_date)
 
         self.last_selected_x_col = None
         self.last_selected_y_col = None

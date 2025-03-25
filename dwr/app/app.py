@@ -4,13 +4,14 @@ import time
 import inspect
 from pathlib import Path
 from functools import wraps
+from pprint import pprint
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import is_numeric_dtype
 
 from shiny import App, Inputs, Outputs, Session, reactive, render, ui
-from shiny.types import FileInfo
+from shiny.types import FileInfo, ImgData
 
 from shinywidgets import output_widget, render_widget
 import shinyswatch
@@ -20,131 +21,168 @@ import plotly.express as px
 import od
 import util
 import app_state
-
-LOG_MSG = 0
-
-
-# TODO: increase level as call stack grows in depth
-def print_func_name(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        jlog(f'{func.__name__}')
-        return func(*args, **kwargs)
-    return wrapper
-
-
-def jlog(msg, level=0):
-    print(f'JLO: {chr(9)*level}{msg}')
-
-    global LOG_MSG
-    LOG_MSG += 1
-    if LOG_MSG > 500:
-        raise RuntimeError('something has gone wrong')
-
-
-def jlog1(msg):
-    return jlog(msg, level=1)
-def jlog2(msg):
-    return jlog(msg, level=2)
+import upload_util
+from util import print_func_name, jlog, jlog1, jlog2
 
 
 def req(variable):
     util.req(variable, output_fn=jlog)
 
-
-# TODO: this, manually 
-od_fn = [name for name, _ in inspect.getmembers(od, inspect.isfunction)]
-
-
-app_ui = ui.page_fixed (
-    ui.layout_sidebar(
-        ui.sidebar(
-            ui.input_file('file1', 'Choose CSV File:', accept=['.csv'], multiple=False),
-            #open="closed",
-        ),
-        #ui.br(),
-        ui.row(
-            ui.input_select('sel_files', 'File:', []),
-        ),
-        ui.row(
-            ui.input_select('sel_x', 'X:', []),
-            ui.input_select('sel_y', 'Y:', []),
-        ),
-        ui.row(
-            ui.column(9, output_widget('plot_data')),
-            #ui.column(3, output_widget('map_data')),
-        ),
-
-        ui.row(
-                ui.input_select('sel_od', 'Outlier Detection Method:', od_fn),
-        ),
-        ui.row(
-            #ui.input_slider('sld_od', 'Bounds:', min=0, max=100, value=[0,100]),
-                ui.input_numeric('num_od_min', 'Min:', None),
-                ui.input_numeric('num_od_max', 'Max:', None),
-            ui.column(2,
-                #ui.input_action_button('btn_od', 'Go', class_='btn-primary', style='position:absolute; bottom:-1; ')
-                ui.input_action_button('btn_od', 'Go', class_='btn-primary', style='height:100%; ')
+app_ui = ui.page_sidebar(
+            ui.sidebar(
+                #ui.output_image('logo'),
+                ui.p('Under construction'),
+                open='closed',
             ),
-        ),
-        ui.br(),
-        ui.accordion(
-            ui.accordion_panel('Tabular View',
-                ui.output_data_frame('uploaded_table'),
+            ui.navset_pill(
+                ui.nav_panel('Upload',
+                    ui.row(
+                        ui.column(4,
+                            ui.input_checkbox_group(
+                                'upload_settings',
+                                'Preprocessing settings:',
+                                {
+                                    'upload_nullify_hyphens': upload_util.upload_checkbox(
+                                        'Nullify hyphen-only cells',
+                                        'Update any values consisting of only hyphens (-) to contain no value. Then, attempt to convert any affected columns to a numeric type.'
+                                    ),
+                                },
+                                selected=[
+                                    'upload_nullify_hyphens',
+                                ]
+                            ),
+                            ui.input_file('file1', 'Choose CSV File:', accept=['.csv'], multiple=False),
+                            ui.output_ui('upload_text'),
+                        ),
+                        ui.column(8,
+                            ui.output_data_frame('staged_table'),
+                        ),
+                    ),
+                ),
+                ui.nav_panel('Clean',
+                    ui.p('Placeholder'),
+                ),
+                ui.nav_panel('Screen',
+                    ui.row(
+                        ui.column(5,
+                            ui.row(
+                                ui.input_select('sel_files_viz', 'File:', []),
+                            ),
+                            ui.row(
+                                ui.input_select('sel_x', 'Date Column:', []),
+                                ui.input_select('sel_y', 'Value Column:', []),
+                            ),
+                            #ui.row(
+                            #    ui.input_select('sel_od', 'Outlier Detection Method:', list(od.OD_IMPLEMENTED.keys())),
+                            #),
+                            #ui.row(
+                            #    ui.input_numeric('num_od_min', 'Min:', None),
+                            #    ui.input_numeric('num_od_max', 'Max:', None),
+                            #    ui.column(2,
+                            #        ui.input_action_button('btn_od', 'Go', class_='btn-primary', style='height:100%; ')
+                            #    ),
+                            #),
+                            ui.hr(),
+                            ui.row(
+                                ui.input_selectize(
+                                    'sel_od_functions',
+                                    'Outlier Detection:',
+                                    choices=list(od.OD_IMPLEMENTED.keys()),
+                                    multiple=True,
+                                ),
+                                ui.column(1,
+                                    ui.input_action_button('btn_od', 'Go', class_='btn-primary', style='height:90%; ')
+                                ),
+                            ),
+                            ui.output_ui('od_function_inputs'),
+                        ),
+                        ui.column(7,
+                            output_widget('plot_data'),
+                        ),
+                    ),
+                    ui.br(),
+                ),
+                ui.nav_spacer(),
+                ui.nav_panel('Settings',
+                    ui.br(),
+                    shinyswatch.theme_picker_ui(),
+                ),
+                ui.nav_panel('Help',
+                    ui.p('Placeholder'),
+                ),
             ),
-            open=False
-        ),
-        ui.br(),
-        ui.br(),
-    ),
-    title='Tool Prototype',
-    theme=shinyswatch.theme.darkly,
+    #title='Tool', # takes up too much space
+    window_title='Tool Prototype',
+    theme=shinyswatch.theme.darkly, # default theme
 )
 
 
 def server(input: Inputs, output: Outputs, session: Session):
-    # This isn't really used as a reactive value
+
+    # Enable theme picker
+    shinyswatch.theme_picker_server()
+
+    # Values just used in the 'upload' page
+    upload_msg = reactive.Value(ui.p())
+    upload_df = reactive.Value(pd.DataFrame())
+
+    # Values just used in the 'visualize' page
     user_state = reactive.Value(app_state.State())
     active_df = reactive.Value(pd.DataFrame())
-
 
     @reactive.effect
     @print_func_name
     def read_file():
         file: list[FileInfo] | None = input.file1()
-
-        if file is None:
-            jlog1('no file')
-            return
+        req(file)
 
         fpath = Path(file[0]['datapath'])
         fname = file[0]['name']
 
-
-        df = pd.read_csv(fpath)
+        # Load file
+        try:
+            df = pd.read_csv(fpath)
+        except Exception as e:
+            upload_msg.set(upload_util.format_upload_error_msg(f'ERROR: could not load {fname}:', exception=e))
+            return
         jlog1(f'loaded {fname}')
 
-        state = user_state()
-        state.add_file(fname, df)
+        #
+        # Preprocess data if needed
+        #
+        selected_upload_options = input.upload_settings()
 
-        ui.update_select('sel_files', choices=state.get_filenames())
+        if 'upload_nullify_hyphens' in selected_upload_options:
+            fixed, attempted = upload_util.nullify_hyphens(df) # operates inplace on df
+        else:
+            fixed, attempted = None, None
+
+        state = user_state()
+        date_cols, num_cols = state.add_file(fname, df)
+
+        ui.update_select('sel_files_viz', choices=state.get_filenames())
+
+        upload_df.set(df)
+        upload_msg.set(upload_util.format_upload_msg(
+            f'Loaded <code>{fname}</code> successfully.',
+            fixed,
+            attempted,
+            date_cols,
+            num_cols,
+        ))
+
         jlog1(f'read_file exit')
 
 
-    #@reactive.calc
-    #@print_func_name
-    #def get_active_df():
-    #    if not (selected_file := input.sel_files()):
-    #        jlog1(f'no selected_file')
-    #        return None
-    #    return user_state().get_file(selected_file).df
-        
+    @render.ui
+    def upload_text():
+        return upload_msg()
 
 
     @reactive.effect
     @print_func_name
     def update_x_and_y_cols():
-        if not (selected_file := input.sel_files()):
+        if not (selected_file := input.sel_files_viz()):
             jlog1(f'no selected_file')
             return
 
@@ -166,7 +204,7 @@ def server(input: Inputs, output: Outputs, session: Session):
     @reactive.effect
     @print_func_name
     def track_selected_x_col():
-        if not (selected_file := input.sel_files()):
+        if not (selected_file := input.sel_files_viz()):
             jlog1(f'no selected_file')
             return
         if not (x_col := input.sel_x()):
@@ -180,7 +218,7 @@ def server(input: Inputs, output: Outputs, session: Session):
     @reactive.effect
     @print_func_name
     def track_selected_y_col():
-        if not (selected_file := input.sel_files()):
+        if not (selected_file := input.sel_files_viz()):
             jlog1(f'no selected_file')
             return
         if not (y_col := input.sel_y()):
@@ -194,10 +232,7 @@ def server(input: Inputs, output: Outputs, session: Session):
     @reactive.effect
     @print_func_name
     def updateminmax():
-        #if not (selected_file := input.sel_files()):
-        #    jlog1(f'no selected_file')
-        #    return
-        if not (y_col := input.sel_y()):
+        if not (y_col := input.sel_y()): #TODO: use req?
             jlog1(f'no ycol')
             return
 
@@ -220,25 +255,84 @@ def server(input: Inputs, output: Outputs, session: Session):
     @reactive.event(input.btn_od)
     @print_func_name
     def do_outlier_detection():
-        #if not (selected_file := input.sel_files()):
-        #    jlog1(f'no selected_file')
-        #    return
-        if not (y_col := input.sel_y()):
-            jlog1(f'no ycol')
-            return
-
         df = active_df()
         req(df)
 
-        y_min = input.num_od_min()
-        y_max = input.num_od_max()
+        sel_od_fns = input.sel_od_functions()
+        req(sel_od_fns)
 
-        ret = od.gross_range_test(df[y_col], (y_min, y_max))
-        new_col_name = util.get_od_name(y_col)
-        df[new_col_name] = ret[od.default_od_col_name]
+        x_col = input.sel_x()
+        req(x_col)
+        y_col = input.sel_y()
+        req(y_col)
 
-        # Force invalidation by just changing the id
-        active_df.set(df.copy(deep=False))
+        # Loop through all selected outlier detection methods and apply them serially
+        for sel_od in sel_od_fns:
+            try:
+                od_info = od.OD_IMPLEMENTED[sel_od]
+            except KeyError: # this can only happen if a user messes with the selections
+                jlog1('very unexpected KeyError: {sel_od}')
+                continue
+
+            kwargs = {}
+
+            if od_info['ts_col_type'] == 'y': # most cases
+                data = df[y_col]
+                new_col_name = od.get_od_name(x_col, y_col, sel_od)
+            else:
+                data = df[x_col]
+                new_col_name = od.get_od_name(x_col, None, sel_od)
+            kwargs['ts'] = data
+
+            jlog1(f'new_col_name: {new_col_name}')
+
+            for arg_id, arg_label, arg_type in od_info['args']:
+                input_id = f'{sel_od}_{arg_id}'
+                value = input[input_id]()
+
+                kwargs[arg_id] = value
+
+            df[new_col_name] = od_info['fn'](**kwargs)
+
+            # Force invalidation by just changing the id
+            active_df.set(df.copy(deep=False))
+
+        return
+
+
+    @render.ui
+    def od_function_inputs():
+        sel_od_fns = input.sel_od_functions()
+        if not sel_od_fns:
+            return ui.div()
+
+        accordions = []
+        for sel_od in sel_od_fns:
+            inputs = []
+            # Some functions don't need extra arguments
+            if not od.OD_IMPLEMENTED[sel_od]['args']:
+                inputs.append(ui.p('No additional arguments needed.'))
+            else:
+                for arg_id, arg_label, arg_type in od.OD_IMPLEMENTED[sel_od]['args']:
+                    input_id = f'{sel_od}_{arg_id}'
+                    if arg_type == str:
+                        inputs.append(ui.input_text(input_id, f'{arg_label}:', ''))
+                    elif arg_type in (int, float):
+                        inputs.append(ui.input_numeric(input_id, f'{arg_label}:', 0))
+                    elif arg_type == 'date_unit':
+                        inputs.append(ui.input_select(input_id, arg_label, od.DATE_STRS))
+
+            accordions.append(
+                ui.accordion_panel(sel_od, ui.layout_columns(*inputs, col_widths=[6, 6]))
+            )
+
+        return ui.accordion(*accordions, open=False)
+
+
+    @render.data_frame
+    @print_func_name
+    def staged_table():
+        return upload_df()
 
 
     @render.data_frame
@@ -260,62 +354,47 @@ def server(input: Inputs, output: Outputs, session: Session):
         y_col = input.sel_y()
 
         if df.empty or not all([x_col, y_col]):
-            jlog1('plot empty')
+            #jlog1('plot empty')
             return px.scatter()
 
-        # This happens when the file has been changed but the change hasn't
-        # propogated to the inputs yet
+        # This happens when the file input value has been changed but the change
+        # hasn't propagated to the inputs yet
         if x_col not in df or y_col not in df:
-            jlog1(f'invalid cols')
-            req(False)
+            #jlog1(f'invalid cols')
+            req(False) # better than returning since returning None will wipe out the graph
             return None
 
-        jlog1(f'plot {x_col}')
-        jlog1(f'plot {y_col}')
+        jlog1(f'plot {x_col}/{y_col}')
+        jlog1(f'{df[x_col].dtype}')
 
-        od_col = util.get_od_name(y_col)
+        # Set up the shape and color of markings, when relevant. We want each
+        # outlier detection test to get a different shape+color combination.
+        px_kwargs = {}
+        if od_cols := od.get_od_names(df, x_col, y_col):
+            px_kwargs['color'] = px_kwargs['symbol'] = categ_name = 'Outlier Status'
 
-        color = None
-        color_discrete_map = None
-        if od_col in df:
-            color = od_col
-            color_discrete_map = {True: 'orange', False: 'blue'}
+            df[categ_name] = df[od_cols].apply(util.get_first_true_column_name, axis=1)
+            px_kwargs['category_orders'] = {
+                categ_name: [od.PASS] + od_cols # keep 'pass' first
+            }
+        jlog1(f'od_cols: {od_cols}')
+            
+        fig = px.scatter(
+            df,
+            #x=df[x_col],
+            x=x_col,
+            y=y_col,
+            **px_kwargs
+        )
 
-
-        fig = px.scatter(df, x=x_col, y=y_col, color=color, color_discrete_map=color_discrete_map)
-        #fig.update_layout(xaxis_type='DATE')
+        od.prettify_column_names(fig, od_cols)
 
         return fig
 
-
-    @render_widget
-    def map_data():
-        jlog('map_data')
-        cities = [
-            {'name': 'Los Angeles', 'lat': 34.0522, 'lon': -118.2437},
-            {'name': 'San Francisco', 'lat': 37.7749, 'lon': -122.4194},
-            {'name': 'San Diego', 'lat': 32.7157, 'lon': -117.1611},
-            {'name': 'Sacramento', 'lat': 38.5816, 'lon': -121.4944},
-            {'name': 'Fresno', 'lat': 36.7378, 'lon': -119.7871}
-        ]
-
-        fig = px.scatter_geo(
-            cities, 
-            lat=[city['lat'] for city in cities], 
-            lon=[city['lon'] for city in cities], 
-            text=[city['name'] for city in cities],
-            title='CA Cities',
-            scope='usa'
-        )
-
-        # focus on CA
-        fig.update_layout(
-            geo=dict(
-                center={'lat': 36.7783, 'lon': -119.4179},
-                projection_scale=5 # adjusts zoom
-            )
-        )
-        return fig
+    #@render.image
+    #def logo():
+    #    img: ImgData = {'src': 'img/logo.png', 'width': '100%'}
+    #    return img
 
 
 app = App(app_ui, server, debug=False)
