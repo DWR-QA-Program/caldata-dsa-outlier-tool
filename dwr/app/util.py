@@ -2,8 +2,10 @@
 import html
 import dateutil
 import dateparser
+from pathlib import Path
 from functools import wraps
 
+import numpy as np
 import pandas as pd
 from pandas.api.types import is_numeric_dtype
 
@@ -12,16 +14,44 @@ from shiny import ui
 
 LOG_MSG = 0
 
+COLORS = {
+    None: '\033[0m',
+    'red': '\033[31m',
+    'green': '\033[32m',
+    'yellow': '\033[33m',
+    'blue': '\033[34m',
+    'purple': '\033[35m',
+    'cyan': '\033[36m',
+}
+
 # TODO: increase level as call stack grows in depth
-def print_func_name(func):
+def print_func_name(color=None):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            key = None if callable(color) else color
+            jlog(f'{COLORS[key]}{func.__name__}\033[0m')
+            return func(*args, **kwargs)
+        return wrapper
+
+    # Allow calling without parentheses
+    if callable(color):
+        return decorator(color)
+    return decorator
+
+
+def catch_errors(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        jlog(f'{func.__name__}')
-        return func(*args, **kwargs)
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            print(f'ERROR: {func.__name__}: {e}')
+            return None
     return wrapper
 
 
-def jlog(msg, level=0):
+def jlog(msg='', level=0):
     print(f'JLO: {chr(9)*level}{msg}')
 
     global LOG_MSG
@@ -30,9 +60,9 @@ def jlog(msg, level=0):
         raise RuntimeError('something has gone wrong')
 
 
-def jlog1(msg):
+def jlog1(msg=''):
     return jlog(msg, level=1)
-def jlog2(msg):
+def jlog2(msg=''):
     return jlog(msg, level=2)
 
 
@@ -41,7 +71,9 @@ def jlog2(msg):
 # 2. Allow for outputting
 def req(variable, output_fn=print):
     if isinstance(variable, pd.DataFrame):
-        cond = not variable.empty # we don't support empty dataframes
+        cond = not variable.empty # we don't pass empty dataframes through
+    elif isinstance(variable, np.ndarray):
+        cond = variable.any()
     else:
         cond = variable
 
@@ -56,8 +88,11 @@ def to_html_list(items):
 
 # Returns the name of index in the input series with the first True value, or
 # None if none are True.
-def get_first_true_column_name(row: pd.Series) -> str:
+def get_true_first_column_name(row: pd.Series) -> str:
     if row.sum() > 0:
         return row.idxmax()
     else:
         return 'pass'
+
+def remove_suffix(filename):
+    return Path(filename).stem

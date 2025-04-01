@@ -11,6 +11,8 @@ from pandas.api.types import is_datetime64_any_dtype
 # This is used to denote data that has not "failed" any outlier detection
 PASS = 'pass'
 
+MANUAL = 'manual_flag'
+
 DATE_STRS = [ # maybe rename this
     'days',
     'hours',
@@ -27,13 +29,29 @@ def get_od_name(x_col, y_col, test_name):
         return f'{x_col}_{y_col}{_F}{test_name}'
 
 
+def get_manual_col(y_col):
+    return f'{y_col}_{MANUAL}'
+
 # Help identify all columns that are the result of running outlier detection on a column
+# or manual flagging.
 def get_od_names(df, x_col, y_col):
-    return [col
+    ret = [col
         for col in df.columns
-        if get_od_name(x_col, y_col, '') in col or 
-           get_od_name(x_col, None, '') in col
+        if any((
+            get_od_name(x_col, y_col, '') in col,
+            get_od_name(x_col, None, '') in col,
+            get_manual_col(y_col) in col,
+        ))
     ]
+
+    # This feeds into how columns are sorted - we want manual flagging to appear first
+    #try:
+    #    idx = ret.index(MANUAL)
+    #    ret.insert(0, ret.pop(idx))
+    #except ValueError: # not found in list
+    #    pass
+
+    return ret
 
 
 # Help rename plotly elements so that they don't display our ugly internal column names.
@@ -43,7 +61,7 @@ def get_od_names(df, x_col, y_col):
 # markers (color & shape). That is what gets changed here.
 def prettify_column_names(figure, od_cols) -> None:
     renames = {
-        col: col[col.find(_F):].lstrip('_')
+        col: MANUAL if MANUAL in col else col[col.find(_F):].lstrip('_')
         for col in od_cols
     }
     if renames:
