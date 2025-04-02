@@ -143,6 +143,8 @@ the provided cadence, will be flagged as invalid.  Specifically, the value that
         raise ValueError('No input data.')
     if not is_datetime64_any_dtype(ts):
         raise ValueError('Input date column does not have a valid datetime data type.')
+    if unit not in DATE_STRS:
+        raise ValueError(f'Input date types must be one of: {DATE_STRS}.')
 
     cadence = pd.Timedelta(number, unit)
 
