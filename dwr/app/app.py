@@ -5,7 +5,6 @@ import asyncio
 import inspect
 from io import StringIO
 from pprint import pprint
-from pathlib import Path
 from functools import partial
 
 import numpy as np
@@ -45,16 +44,21 @@ app_ui = ui.page_sidebar(
                                 'upload_settings',
                                 'Preprocessing settings:',
                                 {
+                                    'data_has_header': upload_util.upload_checkbox(
+                                        'File has header',
+                                        'Uncheck if uploaded file has no header at the top row.'
+                                    ),
                                     'upload_nullify_hyphens': upload_util.upload_checkbox(
                                         'Nullify hyphen-only cells',
                                         'Update any values consisting of only hyphens (-) to contain no value. Then, attempt to convert any affected columns to a numeric type.'
                                     ),
                                 },
                                 selected=[
+                                    'data_has_header',
                                     'upload_nullify_hyphens',
                                 ]
                             ),
-                            ui.input_file('file1', 'Choose CSV File:', accept=['.csv'], multiple=False),
+                            ui.input_file('file1', 'Choose File:', accept=['.csv',], multiple=False),
                             ui.output_ui('upload_text'),
                         ),
                         ui.column(8,
@@ -164,39 +168,39 @@ def server(input: Inputs, output: Outputs, session: Session):
         file: list[FileInfo] | None = input.file1()
         req(file)
 
-        fpath = Path(file[0]['datapath'])
+        fpath = file[0]['datapath']
         fname = file[0]['name']
+
+        with reactive.isolate():
+            selected_upload_options = input.upload_settings()
 
         # Load file
         try:
-            df = pd.read_csv(fpath)
+            df = upload_util.read_csv(fpath, selected_upload_options)
         except Exception as e:
             upload_msg.set(upload_util.format_upload_error_msg(f'ERROR: could not load {fname}:', exception=e))
             return
-        jlog1(f'loaded {fname}')
 
-        #
+        msg_kw = {}
+
         # Preprocess data if needed
-        #
-        selected_upload_options = input.upload_settings()
-
         if 'upload_nullify_hyphens' in selected_upload_options:
-            fixed, attempted = upload_util.nullify_hyphens(df) # operates inplace on df
-        else:
-            fixed, attempted = None, None
+            # operates inplace on df
+            msg_kw['hyphen_fixed'], msg_kw['hyphen_attempted'] = upload_util.nullify_hyphens(df)
 
+        # Register file with internal systems
         state = user_state()
-        date_cols, num_cols = state.add_file(fname, df)
+        file_obj = state.add_file(fname, df)
+        msg_kw['date_cols'] = file_obj.date_cols
+        msg_kw['num_cols'] = file_obj.num_cols
+        msg_kw['composite_date_col'] = file_obj.composite_date_col
 
         ui.update_select('sel_files_viz', choices=state.get_filenames())
 
         upload_df.set(df)
         upload_msg.set(upload_util.format_upload_msg(
             f'Loaded <code>{fname}</code> successfully.',
-            fixed,
-            attempted,
-            date_cols,
-            num_cols,
+            **msg_kw
         ))
 
         jlog1(f'read_file exit')
