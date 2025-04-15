@@ -12,7 +12,7 @@ import pandas as pd
 from pandas.api.types import is_numeric_dtype
 
 from shiny import App, Inputs, Outputs, Session, reactive, render, ui
-from shiny.types import FileInfo, ImgData
+from shiny.types import FileInfo, ImgData, SilentException
 
 from shinywidgets import output_widget, render_widget
 import shinyswatch
@@ -27,6 +27,12 @@ import upload_util
 from util import print_func_name, jlog, jlog1, jlog2
 
 
+INTERNAL_COLS = [
+    'Outlier Status',
+    'idx',
+]
+
+
 def req(variable):
     util.req(variable, output_fn=jlog1)
 
@@ -39,7 +45,7 @@ app_ui = ui.page_sidebar(
             ui.navset_pill(
                 ui.nav_panel('Upload',
                     ui.row(
-                        ui.column(4,
+                        ui.column(3,
                             ui.input_checkbox_group(
                                 'upload_settings',
                                 'Preprocessing settings:',
@@ -59,12 +65,21 @@ app_ui = ui.page_sidebar(
                                 ]
                             ),
                             ui.input_file('file1', 'Choose File:', accept=['.csv',], multiple=False),
+                        ),
+                        ui.column(4,
                             ui.output_ui('upload_text'),
                         ),
-                        ui.column(8,
-                            ui.output_data_frame('staged_table'),
+                        ui.column(5,
+                            ui.output_ui('show_upload_od_feedback'),
                         ),
                     ),
+                ),
+                ui.nav_panel('Explore',
+                    ui.row(
+                        ui.input_select('sel_files_table', 'File:', []),
+                        ui.input_checkbox('checkbox_show_od_cols', 'Show Outlier Detection Columns', False),
+                    ),
+                    ui.output_data_frame('explore_table'),
                 ),
                 ui.nav_panel('Screen',
                     ui.row(
@@ -76,16 +91,6 @@ app_ui = ui.page_sidebar(
                                 ui.input_select('sel_x', 'Date Column:', []),
                                 ui.input_select('sel_y', 'Value Column:', []),
                             ),
-                            #ui.row(
-                            #    ui.input_select('sel_od', 'Outlier Detection Method:', list(od.OD_IMPLEMENTED.keys())),
-                            #),
-                            #ui.row(
-                            #    ui.input_numeric('num_od_min', 'Min:', None),
-                            #    ui.input_numeric('num_od_max', 'Max:', None),
-                            #    ui.column(2,
-                            #        ui.input_action_button('btn_od', 'Go', class_='btn-primary', style='height:100%; ')
-                            #    ),
-                            #),
                             ui.hr(),
                             ui.row(
                                 ui.input_selectize(
@@ -120,6 +125,15 @@ app_ui = ui.page_sidebar(
                     ),
                     ui.br(),
                 ),
+                ui.nav_panel('Experimental 🧪',
+                    ui.input_select('sel_files_columns', 'File:', []), # FIXME: confusing name
+                    ui.row(
+                        ui.column(3,
+                            ui.input_selectize('sel_ph_col', 'Label as pH:', choices=[], multiple=True),
+                            ui.input_action_button('btn_ph_col_sel', 'Go', class_='btn-primary')
+                        ),
+                    style='flex-wrap: nowrap;'),
+                ),
                 ui.nav_spacer(),
                 ui.nav_control(
                     ui.output_ui('show_download_button'),
@@ -134,6 +148,7 @@ app_ui = ui.page_sidebar(
                 ),
             ),
             ui.include_js('js/util.js'),
+            ui.include_css('css/misc.css'),
     #title='Tool', # takes up too much space
     window_title='Tool Prototype',
     theme=shinyswatch.theme.darkly, # default theme
@@ -146,8 +161,8 @@ def server(input: Inputs, output: Outputs, session: Session):
     shinyswatch.theme_picker_server()
 
     # Values just used in the 'upload' page
-    upload_msg = reactive.Value(ui.p())
-    upload_df = reactive.Value(pd.DataFrame())
+    upload_msg = reactive.Value()
+    upload_od_feedback = reactive.Value()
 
     # Values just used in the 'visualize' page
     user_state = reactive.Value(app_state.State())
@@ -162,14 +177,55 @@ def server(input: Inputs, output: Outputs, session: Session):
     redo_stack = []
 
 
+    async def auto_od(file_obj: app_state.File, config=None):
+        try:
+            jlog('auto_od')
+            test_list = od.get_tests(file_obj, config)
+            n_tests = len(test_list)
+            df = file_obj.df
+
+            with ui.Progress(min=0, max=n_tests) as p:
+
+                for i, (test_fn, x_col, y_col, kwargs) in enumerate(test_list):
+                    test_name = test_fn.__name__
+                    test_column = x_col if y_col is None else y_col
+
+                    msg = f'({i+1}/{n_tests})'
+                    dtl = f'{test_name}'#: {test_column}'
+                    p.set(i, message=msg, detail=dtl)
+
+                    jlog1(f'{test_fn.__name__}: {x_col} {y_col}')
+
+                    new_col_name = od.get_od_name(test_name, x_col, y_col)
+
+                    try:
+                        df[new_col_name] = test_fn(df[test_column], **kwargs)
+                    except Exception as e:
+                        result = repr(e)
+                    else:
+                        result = df[new_col_name].sum()
+
+                    file_obj.save_od_result(test_name, x_col, y_col, result)
+
+                    await asyncio.sleep(.1)
+
+            upload_od_feedback.set(file_obj.format_results())
+            jlog1('done here')
+        except Exception as e:
+            upload_od_feedback.set(util.danger(repr(e)))
+
+
+    od_task = reactive.ExtendedTask(auto_od)
+
+
     @reactive.effect
     @print_func_name
     def read_file():
         file: list[FileInfo] | None = input.file1()
         req(file)
 
-        fpath = file[0]['datapath']
-        fname = file[0]['name']
+        fpath = file[0]['datapath'] # file path internal to browser, only used here
+        fname = file[0]['name'] # file name used as unique key, used all over
 
         with reactive.isolate():
             selected_upload_options = input.upload_settings()
@@ -196,12 +252,18 @@ def server(input: Inputs, output: Outputs, session: Session):
         msg_kw['composite_date_col'] = file_obj.composite_date_col
 
         ui.update_select('sel_files_viz', choices=state.get_filenames())
+        ui.update_select('sel_files_table', choices=state.get_filenames())
+        ui.update_select('sel_files_columns', choices=state.get_filenames())
 
-        upload_df.set(df)
         upload_msg.set(upload_util.format_upload_msg(
             f'Loaded <code>{fname}</code> successfully.',
             **msg_kw
         ))
+
+        upload_od_feedback.set(ui.p('Processing...'))
+
+        # Run outlier detection
+        od_task.invoke(file_obj)
 
         jlog1(f'read_file exit')
 
@@ -209,6 +271,13 @@ def server(input: Inputs, output: Outputs, session: Session):
     @render.ui
     def upload_text():
         return upload_msg()
+
+
+    @render.ui
+    @print_func_name('cyan')
+    def show_upload_od_feedback():
+        req(od_feedback := upload_od_feedback())
+        return ui.panel_well(od_feedback)
 
 
     @reactive.effect
@@ -308,10 +377,10 @@ def server(input: Inputs, output: Outputs, session: Session):
 
             if od_info['ts_col_type'] == 'y': # most cases
                 data = df[y_col]
-                new_col_name = od.get_od_name(x_col, y_col, sel_od)
+                new_col_name = od.get_od_name(sel_od, x_col, y_col)
             else:
                 data = df[x_col]
-                new_col_name = od.get_od_name(x_col, None, sel_od)
+                new_col_name = od.get_od_name(sel_od, x_col, None)
             kwargs['ts'] = data
 
             jlog1(f'new_col_name: {new_col_name}')
@@ -322,7 +391,10 @@ def server(input: Inputs, output: Outputs, session: Session):
 
                 kwargs[arg_id] = value
 
-            df[new_col_name] = od_info['fn'](**kwargs)
+            try:
+                df[new_col_name] = od_info['fn'](**kwargs)
+            except Exception as e:
+                ui.notification_show(ui.p(f'ERROR: {str(e)}'), duration=5, type='error')
 
         # Force invalidation by changing (just) the id of active_df. We also have
         # to keep the version of the df in the user's state in sync.
@@ -363,18 +435,57 @@ def server(input: Inputs, output: Outputs, session: Session):
 
 
     @render.data_frame
+    @reactive.calc
     @print_func_name
-    def staged_table():
-        return upload_df()
+    def explore_table():
+        req(selected_file := input.sel_files_table())
+        show_od_cols = input.checkbox_show_od_cols()
+        
+        file_obj = user_state().get_file(selected_file)
+        df = file_obj.df
 
 
-    #@render.data_frame
-    #@print_func_name
-    #def uploaded_table():
-    #    df = active_df()
-    #    if df is None:
-    #        return None
-    #    return df
+
+        # Filter out outlier detection columns if needed
+        if not show_od_cols:
+            od_cols = od.get_all_od_names(df)
+            df = df[[c for c in df.columns if c not in od_cols]] 
+
+        # Reorder columns so that date columns are shown first. Also, filter
+        # out internal columns
+        order = file_obj.date_cols + [c for c in df.columns if c not in file_obj.date_cols and c not in INTERNAL_COLS]
+        return df[order]
+
+
+    @reactive.effect
+    @print_func_name('red')
+    def populate_columns():
+        req(selected_file := input.sel_files_columns())
+
+        file_obj = user_state().get_file(selected_file)
+        df = file_obj.df
+
+        ui.update_selectize('sel_ph_col', choices=list(df.columns),)
+
+
+    @reactive.effect
+    @reactive.event(input.btn_ph_col_sel)
+    @print_func_name('green')
+    def mark_columns():
+        req(selected_file := input.sel_files_columns())
+        req(group := input.sel_ph_col())
+        file_obj = user_state().get_file(selected_file)
+        df = file_obj.df
+        config = []
+        for col in group:
+            file_obj.ph_cols.append(col)
+            config.append((
+                od.pH_range_test,
+                col,
+                {}
+            ))
+        od_task.invoke(file_obj, config)
+        
 
 
     @render_widget
@@ -528,13 +639,23 @@ def server(input: Inputs, output: Outputs, session: Session):
     @reactive.effect
     @reactive.event(input.btn_flag)
     def flag():
-        manual_flag(True)
+        try:
+            manual_flag(True)
+            reset_graph_selection() # could be removed if the graph isn't always reloaded
+        except Exception as e:
+            if not isinstance(e, SilentException):
+                ui.notification_show(ui.p(f'Please report this to James: "flag": {repr(e)}'), duration=None, type='error')
 
 
     @reactive.effect
     @reactive.event(input.btn_unflag)
     def unflag():
-        manual_flag(False)
+        try:
+            manual_flag(False)
+            reset_graph_selection() # could be removed if the graph isn't always reloaded
+        except Exception as e:
+            if not isinstance(e, SilentException):
+                ui.notification_show(ui.p(f'Please report this to James: "unflag": {repr(e)}'), duration=None, type='error')
 
 
     @reactive.effect
@@ -570,11 +691,8 @@ def server(input: Inputs, output: Outputs, session: Session):
         set_flags(sel, cols, curr)
 
 
-    @reactive.effect
-    @print_func_name('purple')
-    def react_to_new_selected_file():
-        req(selected_file := input.sel_files_viz())
-
+    @print_func_name
+    def reset_flag_stacks():
         # Clear stacks
         nonlocal redo_stack, undo_stack
         undo_stack = []
@@ -582,9 +700,30 @@ def server(input: Inputs, output: Outputs, session: Session):
         unemphasize_undo_button()
         unemphasize_redo_button()
 
-        # Clear graph selection
+
+    @print_func_name
+    def reset_graph_selection():
         nonlocal selected_points
         selected_points = []
+
+
+    def reset_manual_flag_objects():
+        reset_flag_stacks()
+        reset_graph_selection()
+
+
+    @reactive.effect
+    def react_to_new_selected_file():
+        req(selected_file := input.sel_files_viz())
+        reset_manual_flag_objects()
+
+
+    @reactive.effect
+    def react_to_new_screen_cols():
+        sel_x = input.sel_x()
+        sel_y = input.sel_y()
+        req(sel_x or sel_y)
+        reset_manual_flag_objects()
 
 
     async def update_button_class(id, rm, add):
@@ -597,6 +736,7 @@ def server(input: Inputs, output: Outputs, session: Session):
             }
         )
         
+    # TODO: make sure these can't execute concurrently
     def emphasize_undo_button():
         asyncio.create_task(update_button_class('btn_undo_flag', 'btn-light', 'btn-warning'))
     def unemphasize_undo_button():

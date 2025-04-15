@@ -1,3 +1,6 @@
+import pandas as pd
+from shiny import ui
+import util
 import upload_util
 
 # Tracks the state of a user's session
@@ -24,9 +27,11 @@ class File():
         self.composite_date_col = None
         self.last_selected_x_col = None
         self.last_selected_y_col = None
+        self.od_results = {}
 
         self.date_cols = upload_util.get_date_cols(self.df)
         self.num_cols = upload_util.get_num_cols(self.df)
+        self.ph_cols = []
 
         # Coerce numeric/string columns to date columns
         for col in self.date_cols:
@@ -47,3 +52,33 @@ class File():
                         self.num_cols.remove(col)
                     except ValueError:
                         pass
+
+
+    def save_od_result(self, test_name, x_col, y_col, result):
+        results = self.od_results
+        if test_name not in results:
+            results[test_name] = {}
+        if x_col not in results[test_name]:
+            results[test_name][x_col] = {}
+
+        results[test_name][x_col][y_col] = result
+
+
+    def get_result(self, test_name, x_col, y_col):
+        try:
+            return self.results[test_name][x_col][y_col]
+        except KeyError:
+            return None
+
+    def format_results(self):
+        ret = ui.TagList()
+        for test_name in self.od_results:
+            for x_col in self.od_results[test_name]:
+                for y_col in self.od_results[test_name][x_col]:
+                    result = self.od_results[test_name][x_col][y_col]
+                    if isinstance(result, int):
+                        ret.append(ui.p(f'{test_name}: {x_col}, {y_col}: {result} outliers'))
+                    else: # an error ocurred
+                        ret.append(ui.p(f'{test_name}: {x_col}, {y_col}: {result}'))
+        return ui.HTML(ret)
+

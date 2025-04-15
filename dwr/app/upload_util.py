@@ -20,7 +20,7 @@ def read_csv(fpath, options):
 
     if header is None:
         df.rename(
-            {col: str(col) for col in df.columns},
+            {col: f'col{col}' for col in df.columns},
             axis='columns',
             inplace=True,
         )
@@ -157,7 +157,7 @@ def upload_checkbox(description, tooltip_text):
 def format_upload_error_msg(msg, exception):
     return ui.panel_well(
         util.danger(msg),
-        ui.p(str(exception)),
+        ui.p(repr(exception)),
     )
 
 # Returns ui elements that show the status of a file upload+parse

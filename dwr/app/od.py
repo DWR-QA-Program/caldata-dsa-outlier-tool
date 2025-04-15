@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import is_datetime64_any_dtype
 
+import app_state
+
 # This is used to denote data that has not "failed" any outlier detection
 PASS = 'pass'
 
@@ -22,7 +24,7 @@ DATE_STRS = [ # maybe rename this
 _F = '_failed_'
 
 # Name a column that is the result of running outlier detection
-def get_od_name(x_col, y_col, test_name):
+def get_od_name(test_name, x_col, y_col):
     if y_col is None:
         return f'{x_col}{_F}{test_name}' # whole time series under question
     else:
@@ -38,8 +40,8 @@ def get_od_names(df, x_col, y_col):
     ret = [col
         for col in df.columns
         if any((
-            get_od_name(x_col, y_col, '') in col,
-            get_od_name(x_col, None, '') in col,
+            get_od_name('', x_col, y_col) in col,
+            get_od_name('', x_col, None) in col,
             get_manual_col(y_col) in col,
         ))
     ]
@@ -52,6 +54,11 @@ def get_od_names(df, x_col, y_col):
     #    pass
 
     return ret
+
+
+# A little hacky
+def get_all_od_names(df):
+    return get_od_names(df, '', '')
 
 
 # Help rename plotly elements so that they don't display our ugly internal column names.
@@ -72,6 +79,40 @@ def prettify_column_names(figure, od_cols) -> None:
                 hovertemplate = x.hovertemplate.replace(x.name, renames[x.name])
             ))
 
+
+# Tests than can be run on any table
+def get_default_tests():
+    return {
+        'x': [time_gap_test_auto],
+        'y': [value_gap_test],
+    }
+
+
+def get_tests(file: app_state.File, config):
+    if config is not None:
+        ret = []
+        for test_fn, y_col, kwargs in config:
+            for x_col in file.date_cols:
+                if True:
+                    ret.append((
+                        test_fn,
+                        x_col,
+                        y_col,
+                        kwargs,
+                    ))
+        return ret
+    test_types = get_default_tests()
+
+    ret = []
+    for date_test in test_types['x']:
+        ret.extend(((date_test, x_col, None, {}) for x_col in file.date_cols))
+    for value_test in test_types['y']:
+        ret.extend(((value_test, x_col, y_col, {}) for x_col in file.date_cols for y_col in file.num_cols))
+    return ret
+
+
+def pH_range_test(ts) -> pd.Series:
+    return gross_range_test(ts, 0, 14)
 
 
 def gross_range_test(ts, minimum, maximum) -> pd.Series:
@@ -103,6 +144,8 @@ def gross_range_test(ts, minimum, maximum) -> pd.Series:
         raise ValueError('At least 1 min/max parameter must be specified.')
 
     if minimum is not None and maximum is not None:
+        if minimum > maximum:
+            raise ValueError('Minimum value cannot exceed maximum value')
         output_ts = (ts > maximum) | (ts <= minimum)
     elif minimum is not None:
         output_ts = ts <= minimum
@@ -112,7 +155,11 @@ def gross_range_test(ts, minimum, maximum) -> pd.Series:
     return output_ts
 
 
-def time_gap_test(ts: pd.Series, number: int, unit: str) -> pd.Series:
+def time_gap_test_auto(ts: pd.Series) -> pd.Series:
+    return time_gap_test(ts, None, None, ts.diff().median())
+    
+
+def time_gap_test(ts: pd.Series, number: int, unit: str, delta=None) -> pd.Series:
     '''
     Apply a time gap test. Any gap between data points, either larger or smaller than
 the provided cadence, will be flagged as invalid.  Specifically, the value that
@@ -129,6 +176,9 @@ the provided cadence, will be flagged as invalid.  Specifically, the value that
     unit : str
         Type of time unit to measure (ex: days, hours). pandas.Timedelta must support this.
 
+    delta : pd.Timedelta
+        Optional argument that overrides the "number" and "unit" arguments.
+
     Returns
     -------
     pd.Series
@@ -136,17 +186,17 @@ the provided cadence, will be flagged as invalid.  Specifically, the value that
 
     Examples
     --------
-    >>> df['failed_test'] = time_gap_test(df['test_column'], cadence=pd.Timedelta('1 days'))
+    >>> df['failed_test'] = time_gap_test(df['test_column'], number=1, unit='days'))
 
     '''
     if ts.empty:
         raise ValueError('No input data.')
     if not is_datetime64_any_dtype(ts):
         raise ValueError('Input date column does not have a valid datetime data type.')
-    if unit not in DATE_STRS:
+    if unit not in DATE_STRS and delta is None:
         raise ValueError(f'Input date types must be one of: {DATE_STRS}.')
 
-    cadence = pd.Timedelta(number, unit)
+    cadence = pd.Timedelta(number, unit) if delta is None else delta
 
     output_ts = ts.diff() != cadence
 
