@@ -1,0 +1,11 @@
+/* Make the notification box a little bigger */
+#shiny-notification-panel {
+    zoom: 1.2;
+}
+
+/* Make the "upload complete" not clip. TODO: make look better */
+/*div > div.progress-bar {
+.shiny-file-input-progress {
+    overflow: visible;
+    border-radius: 10px;
+}*/

@@ -81,8 +81,18 @@ def req(variable, output_fn=print):
     output_fn(f'req passed')
 
 
+def success(msg):
+    return ui.p(msg, class_='text-success')
+def warning(msg):
+    return ui.p(msg, class_='text-warning')
+def danger(msg):
+    return ui.p(msg, class_='text-danger')
+def info(msg):
+    return ui.p(msg, class_='text-info')
+
+
 def to_html_list(items):
-    list_items = ''.join(f'<li>{html.escape(item)}</li>' for item in items)
+    list_items = ''.join(f'<li>{html.escape(str(item))}</li>' for item in items)
     return f'<ul>{list_items}</ul>'
 
 
