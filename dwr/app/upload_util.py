@@ -10,8 +10,8 @@ from shiny import ui
 
 import util
 from util import to_html_list, jlog1, print_func_name
+from m import DATETIMECOL
 
-DATETIMECOL = 'DATETIME'
 
 def read_csv(fpath, options):
     header = 'infer' if 'data_has_header' in options else None
@@ -26,6 +26,7 @@ def read_csv(fpath, options):
         )
 
     return df
+
 
 def get_date_cols(df):
     ret = []
@@ -59,6 +60,7 @@ def try_parse_date(value, strict=False):
     if strict:
         return None
     return value
+
 
 def to_date(year: pd.Series, day_of_year: pd.Series, hour_and_minutes: pd.Series) -> pd.Series:
     if not pd.api.types.is_object_dtype(year):
@@ -98,11 +100,31 @@ def get_hour_cols(df, thresh):
 
 
 @print_func_name('yellow')
-def attempt_composite_date(df, sample_size=10):
+def attempt_composite_date(df, sample_size=10) -> tuple[str | None, str | None, str | None]:
+    '''
+    Looks through all columns of the input dataframe and attempts to construct a
+    valid datetime column out of 3 columns. These columns must be in succession and
+    consist of >= 90% values that respectively match a year, day of the month, and
+    hour of the day.
+    
+    This function operates "inplace" on the input DataFrame.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        The dataframe under question
+    sample_size : int
+        The number of rows that should be sampled to evaluate date columns on
+
+    Returns
+    -------
+    tuple
+        Contains the names of the columns used to create a date column, or 3 Nones.
+    '''
     try:
         sample = df.sample(sample_size)
     except ValueError: # too few rows
-        return
+        return None, None, None
 
     # We're only looking for columns that have been read in as integers really
     sample = sample.select_dtypes(exclude=['object'])
@@ -160,6 +182,7 @@ def format_upload_error_msg(msg, exception):
         ui.p(repr(exception)),
     )
 
+
 # Returns ui elements that show the status of a file upload+parse
 def format_upload_msg(msg,
                       hyphen_fixed=[],
@@ -216,10 +239,26 @@ def format_upload_msg(msg,
     return ui.panel_well(elements)
 
 
-# Modifies input df inplace
-def nullify_hyphens(df):
-    fixed = [] # list of columns we successfully converted to numeric types
-    attempted = [] # list of columns we removed hyphens from but still couldn't convert
+def nullify_hyphens(df) -> tuple[list[str], list[str]]:
+    '''
+    Cleans the input DataFrame by removing values that consist of only hyphen
+    characters. Attempts to convert affected columns to a numeric type
+    
+    This function operates "inplace" on the input DataFrame.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        The dataframe under question
+
+    Returns
+    -------
+    fixed, attempted
+        fixed: list of columns that were cleaned and converted to numeric types
+        attempted: list of columns cleaned of hyphens that remained non-numeric
+    '''
+    fixed = []
+    attempted = []
 
     # Find out ahead of time which columns even contain values with only hyphens
     mask = df.astype(str).apply(lambda col: col.str.match(r'^-+$'))

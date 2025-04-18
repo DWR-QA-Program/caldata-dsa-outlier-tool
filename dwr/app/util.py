@@ -11,6 +11,7 @@ from pandas.api.types import is_numeric_dtype
 
 import shiny
 from shiny import ui
+from m import PASS
 
 LOG_MSG = 0
 
@@ -96,13 +97,18 @@ def to_html_list(items):
     return f'<ul>{list_items}</ul>'
 
 
-# Returns the name of index in the input series with the first True value, or
-# None if none are True.
+# When a row has True values for multiple outlier tests, which test should be displayed
+# on the "screen" graph? This function aims to solve this issue by finding the first
+# column with a True value, left to right. This gives consistency to the graph.
+#
+# This function is called row-wise on a list of outlier detection columns, producing
+# one string value (a column name) for each given row. The output can be used to
+# construct a column used for labels in the "screen" graph.
 def get_true_first_column_name(row: pd.Series) -> str:
     if row.sum() > 0:
         return row.idxmax()
     else:
-        return 'pass'
+        return PASS
 
 def remove_suffix(filename):
     return Path(filename).stem

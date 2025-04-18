@@ -20,18 +20,13 @@ import shinyswatch
 import plotly.express as px
 import plotly.graph_objs as go
 
+import m
 import od
 import app_ui
 import util
 import app_state
 import upload_util
 from util import print_func_name, jlog, jlog1, jlog2
-
-
-INTERNAL_COLS = [
-    'Outlier Status',
-    'idx',
-]
 
 
 def req(variable):
@@ -336,7 +331,7 @@ def server(input: Inputs, output: Outputs, session: Session):
 
         # Reorder columns so that date columns are shown first. Also, filter
         # out internal columns
-        order = file_obj.date_cols + [c for c in df.columns if c not in file_obj.date_cols and c not in INTERNAL_COLS]
+        order = file_obj.date_cols + [c for c in df.columns if c not in file_obj.date_cols and c not in m.INTERNAL_COLS]
         return df[order]
 
 
@@ -395,16 +390,16 @@ def server(input: Inputs, output: Outputs, session: Session):
         # outlier detection test to get a different shape+color combination.
         px_kwargs = {}
         if od_cols := od.get_od_names(df, x_col, y_col):
-            px_kwargs['color'] = px_kwargs['symbol'] = categ_name = 'Outlier Status'
+            px_kwargs['color'] = px_kwargs['symbol'] = categ_name = m.OUTLIER_TYPE
 
             df[categ_name] = df[od_cols].apply(util.get_true_first_column_name, axis=1)
             px_kwargs['category_orders'] = {
-                categ_name: [od.PASS] + od_cols # keep 'pass' first
+                categ_name: [m.PASS] + od_cols # keep 'pass' first
             }
         jlog1(f'od_cols: {od_cols}')
 
         # This will allow us to correlate selected data points with "df"
-        df['idx'] = df.index
+        df[m.IDX] = df.index
 
         # We need the graph as a widget so we can register callbacks. It might end up
         # being preferable to ditch plotly express and manually create the traces...
@@ -412,7 +407,7 @@ def server(input: Inputs, output: Outputs, session: Session):
             df,
             x=x_col,
             y=y_col,
-            custom_data='idx',
+            custom_data=m.IDX,
             **px_kwargs
         ))
 
@@ -420,9 +415,9 @@ def server(input: Inputs, output: Outputs, session: Session):
 
         jlog1(f'{len(fig.data)} trace(s)')
         for i, trace in enumerate(fig.data):
-            trace.on_selection(partial(gather_selection, trace_num=i))
+            trace.on_selection(partial(callback_data_selected, trace_num=i))
 
-        fig.data[0].on_deselect(clear_selection) # only need to clear selections once
+        fig.data[0].on_deselect(clear_selection) # we only need to clear the selection once
 
         return fig
 
@@ -430,11 +425,13 @@ def server(input: Inputs, output: Outputs, session: Session):
     # Note about callbacks: Plotly catches and completely ignores exceptions within
     # callback functions. We catch and print them to make debugging possible.
 
-    # Each trace has a 0-indexed x and y list of values. Here, we use these
-    # indices to get the indices in the original DataFrame.
+    # This is executed on each trace in the graph (i.e. each set of labeled points,
+    # like "pass", "test1", "test2", etc). Each trace has a 0-indexed list of indices -
+    # these are the points on the graph that have been selected. We use the customdata
+    # parameter set up for us to map these values to the values in the original DataFrame.
     @util.catch_errors
     @print_func_name
-    def gather_selection(trace, points, selector, trace_num: int) -> None:
+    def callback_data_selected(trace, points, selector, trace_num: int) -> None:
         nonlocal selected_points
 
         jlog1(f'trace #{trace_num}: {trace.legendgroup}')
@@ -462,6 +459,21 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     @print_func_name
     def set_flags(indices: list, cols: list[str], value: bool|list[bool]) -> None:
+        '''
+        Updates the manual flags of the active dataframe. The whole dataframe won't be
+        updated, just the relevant rows and columns specified by "indices" and "cols",
+        respectively.
+
+        Parameters
+        ----------
+        indices : list
+            A list of index values belonging to the input dataframe to apply "value" to.
+        cols : list
+            List of columns to apply "value" to.
+        value : bool or list of bools
+            The value(s) we want to set our dataframe's selected rows/columns to.
+        '''
+
         req(selected_file := input.sel_files_viz())
 
         jlog1(indices)
@@ -475,14 +487,15 @@ def server(input: Inputs, output: Outputs, session: Session):
         with reactive.isolate():
             df = active_df()
 
+        # This makes use of pandas' overloaded assignment function, allowing a
+        # single value or list of values.
         df.loc[indices, cols] = value
-
-        #active_df.set(df.copy(deep=False))
 
         # See comment in do_outlier_detection function
         dfcp = df.copy(deep=False)
         user_state().get_file(selected_file).df = dfcp
         active_df.set(dfcp)
+
 
     def manual_flag(value: bool) -> None:
         req(selected_points)
@@ -576,7 +589,6 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     @print_func_name
     def reset_flag_stacks():
-        # Clear stacks
         nonlocal redo_stack, undo_stack
         undo_stack = []
         redo_stack = []

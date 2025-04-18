@@ -42,8 +42,8 @@ class File():
 
         if not self.date_cols:
             if all((replaced_columns := upload_util.attempt_composite_date(self.df))):
-                self.composite_date_col = upload_util.DATETIMECOL
-                self.date_cols.append(upload_util.DATETIMECOL)
+                self.composite_date_col = m.DATETIMECOL
+                self.date_cols.append(m.DATETIMECOL)
 
                 # Remove any numeric columns that contributed to the date since graphing
                 # them would just be graphing a component of the x axis.
