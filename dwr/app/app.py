@@ -3,7 +3,7 @@ import math
 import time
 import asyncio
 import inspect
-from io import StringIO
+from io import StringIO, BytesIO
 from pprint import pprint
 from functools import partial
 
@@ -132,6 +132,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         ui.update_select('sel_files_viz', choices=state.get_filenames())
         ui.update_select('sel_files_table', choices=state.get_filenames())
         ui.update_select('sel_files_columns', choices=state.get_filenames())
+        ui.update_select('sel_files_export', choices=state.get_filenames())
 
         upload_msg.set(upload_util.format_upload_msg(
             f'Loaded <code>{fname}</code> successfully.',
@@ -642,29 +643,56 @@ def server(input: Inputs, output: Outputs, session: Session):
         asyncio.create_task(update_button_class('btn_redo_flag', 'btn-info', 'btn-light'))
 
 
-    @render.ui
-    def show_download_button():
-        selected_file = input.sel_files_viz()
+    def get_export_file_name():
+        selected_file = input.sel_files_export()
         req(selected_file)
-        selected_file = util.remove_suffix(selected_file)
+        selected_ext = input.sel_export_format()
+        custom_fname = input.text_export_custom_fname()
 
-        # 0001f4be is another floppy disk option
-        return ui.download_button('download_data', f'\U0001f5ab {selected_file}', class_='btn-primary', style='width: auto; margin: 0 auto')
+        if custom_fname:
+            if selected_ext not in custom_fname:
+                custom_fname += selected_ext
+            return custom_fname
+
+        return f'{util.remove_suffix(selected_file)}_screened{selected_ext}'
+
+
+    @render.ui
+    @print_func_name('green')
+    def show_download_button():
+        fname = get_export_file_name()
+        jlog(fname)
+        return ui.download_button('download_data', fname, class_='btn-primary')
 
 
     @render.download(
-        filename=lambda: f'{util.remove_suffix(input.sel_files_viz())}_screened.csv'
+        filename=get_export_file_name
     )
-    async def download_data():
+    async def download_data(chunk_size=8192):
         df = active_df()
         req(df)
 
-        buffer = StringIO()
-        df.to_csv(buffer, index=False)
+        selected_ext = input.sel_export_format()
+        selected_export_options = input.export_settings()
+
+        header = 'include_header' in selected_export_options
+
+        if selected_ext == '.xlsx':
+            buffer = BytesIO()
+            df.to_excel(buffer, index=False, header=header)
+        else:
+            buffer = StringIO()
+            df.to_csv(buffer, index=False, header=header)
+
         buffer.seek(0)
 
-        for line in buffer:
-            yield line
+        while True:
+            # We don't seem to need to encode string values to binary
+            chunk = buffer.read(chunk_size)
+            if not chunk:
+                break
+            yield chunk
+            await asyncio.sleep(0) # allow event loop to switch tasks
 
     #@render.image
     #def logo():

@@ -1,4 +1,5 @@
 # misc functions
+import os
 import html
 import dateutil
 import dateparser
@@ -53,6 +54,8 @@ def catch_errors(func):
 
 
 def jlog(msg='', level=0):
+    if os.environ.get('LOGLEVEL') is None:
+        return
     print(f'JLO: {chr(9)*level}{msg}')
 
     global LOG_MSG

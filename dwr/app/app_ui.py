@@ -1,3 +1,4 @@
+from htmltools import tags
 from shiny import ui
 
 from shinywidgets import output_widget
@@ -13,7 +14,7 @@ app_ui = ui.page_sidebar(
                 open='closed',
             ),
             ui.navset_pill(
-                ui.nav_panel('Upload',
+                ui.nav_panel('Import',
                     ui.row(
                         ui.column(3,
                             ui.input_checkbox_group(
@@ -34,7 +35,7 @@ app_ui = ui.page_sidebar(
                                     'upload_nullify_hyphens',
                                 ]
                             ),
-                            ui.input_file('file1', 'Choose File:', accept=['.csv',], multiple=False),
+                            ui.input_file('file1', 'Choose CSV File:', accept=['.csv',], multiple=False),
                         ),
                         ui.column(4,
                             ui.output_ui('upload_text'),
@@ -95,6 +96,30 @@ app_ui = ui.page_sidebar(
                     ),
                     ui.br(),
                 ),
+                ui.nav_panel('Export',
+                    ui.input_select('sel_files_export', 'Choose file to export:', []),
+                    ui.input_checkbox_group(
+                        'export_settings',
+                        '',
+                        {
+                            'include_header': upload_util.upload_checkbox(
+                                'Include header',
+                                'Exported file will include header row when checked',
+                            ),
+                        },
+                        selected=[
+                            'include_header',
+                        ],
+                    ),
+                    ui.input_select('sel_export_format', 'File format:', ['.csv', '.xlsx']),
+                    ui.input_text('text_export_custom_fname', 'Custom file name (optional):', ''),
+                    ui.div(
+                        tags.label('Download:', for_='download_data', class_='control-label'),
+                        ui.div(
+                            ui.output_ui('show_download_button'),
+                        ),
+                    ),
+                ),
                 ui.nav_panel('Experimental 🧪',
                     ui.input_select('sel_files_columns', 'File:', []), # FIXME: confusing name
                     ui.row(
@@ -103,10 +128,6 @@ app_ui = ui.page_sidebar(
                             ui.input_action_button('btn_ph_col_sel', 'Go', class_='btn-primary')
                         ),
                     style='flex-wrap: nowrap;'),
-                ),
-                ui.nav_spacer(),
-                ui.nav_control(
-                    ui.output_ui('show_download_button'),
                 ),
                 ui.nav_spacer(),
                 ui.nav_panel('Settings',
