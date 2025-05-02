@@ -4,6 +4,7 @@ from shiny import ui
 from shinywidgets import output_widget
 import shinyswatch
 
+import m
 import od
 import upload_util
 
@@ -141,6 +142,6 @@ app_ui = ui.page_sidebar(
             ui.include_js('js/util.js'),
             ui.include_css('css/misc.css'),
     #title='Tool', # takes up too much space
-    window_title='Tool Prototype',
-    theme=shinyswatch.theme.darkly, # default theme
+    window_title=m.WINDOW_TITLE,
+    theme=m.DEFAULT_THEME,
 )

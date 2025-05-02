@@ -2,6 +2,7 @@
 # 'm' stands for miscellaneous variables: it is kept short to promote code
 # readability at the expense of mild confusion upon first seeing it.
 #
+import shinyswatch
 
 #
 # Outlier detection column creation
@@ -39,3 +40,8 @@ INTERNAL_COLS = [
 
 # Column name of any datetime column created by the tool
 DATETIMECOL = 'DATETIME'
+
+# Sets the title of a user's browser tab
+WINDOW_TITLE = 'Tool Prototype'
+
+DEFAULT_THEME = shinyswatch.theme.darkly
