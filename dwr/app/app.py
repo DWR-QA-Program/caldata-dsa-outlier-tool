@@ -3,7 +3,7 @@ import math
 import time
 import asyncio
 import inspect
-from io import StringIO
+from io import StringIO, BytesIO
 from pprint import pprint
 from functools import partial
 
@@ -20,139 +20,17 @@ import shinyswatch
 import plotly.express as px
 import plotly.graph_objs as go
 
+import m
 import od
+import app_ui
 import util
 import app_state
 import upload_util
 from util import print_func_name, jlog, jlog1, jlog2
 
 
-INTERNAL_COLS = [
-    'Outlier Status',
-    'idx',
-]
-
-
 def req(variable):
     util.req(variable, output_fn=jlog1)
-
-app_ui = ui.page_sidebar(
-            ui.sidebar(
-                #ui.output_image('logo'),
-                shinyswatch.theme_picker_ui(),
-                open='closed',
-            ),
-            ui.navset_pill(
-                ui.nav_panel('Upload',
-                    ui.row(
-                        ui.column(3,
-                            ui.input_checkbox_group(
-                                'upload_settings',
-                                'Preprocessing settings:',
-                                {
-                                    'data_has_header': upload_util.upload_checkbox(
-                                        'File has header',
-                                        'Uncheck if uploaded file has no header at the top row.'
-                                    ),
-                                    'upload_nullify_hyphens': upload_util.upload_checkbox(
-                                        'Nullify hyphen-only cells',
-                                        'Update any values consisting of only hyphens (-) to contain no value. Then, attempt to convert any affected columns to a numeric type.'
-                                    ),
-                                },
-                                selected=[
-                                    'data_has_header',
-                                    'upload_nullify_hyphens',
-                                ]
-                            ),
-                            ui.input_file('file1', 'Choose File:', accept=['.csv',], multiple=False),
-                        ),
-                        ui.column(4,
-                            ui.output_ui('upload_text'),
-                        ),
-                        ui.column(5,
-                            ui.output_ui('show_upload_od_feedback'),
-                        ),
-                    ),
-                ),
-                ui.nav_panel('Explore',
-                    ui.row(
-                        ui.input_select('sel_files_table', 'File:', []),
-                        ui.input_checkbox('checkbox_show_od_cols', 'Show Outlier Detection Columns', False),
-                    ),
-                    ui.output_data_frame('explore_table'),
-                ),
-                ui.nav_panel('Screen',
-                    ui.row(
-                        ui.column(5,
-                            ui.row(
-                                ui.input_select('sel_files_viz', 'File:', []),
-                            ),
-                            ui.row(
-                                ui.input_select('sel_x', 'Date Column:', []),
-                                ui.input_select('sel_y', 'Value Column:', []),
-                            ),
-                            ui.hr(),
-                            ui.row(
-                                ui.input_selectize(
-                                    'sel_od_functions',
-                                    'Outlier Detection:',
-                                    choices=list(od.OD_IMPLEMENTED.keys()),
-                                    multiple=True,
-                                ),
-                                ui.column(1,
-                                    ui.input_action_button('btn_od', 'Go', class_='btn-primary', style='height:90%;')
-                                ),
-                            ),
-                            ui.output_ui('od_function_inputs'),
-                        ),
-                        ui.column(7,
-                            ui.row(
-                                ui.column(2),
-                                ui.column(4,
-                                    ui.input_action_button('btn_flag', 'Flag', class_='btn-danger', style='margin: 0 3px;'),
-                                    ui.input_action_button('btn_unflag', 'Unflag', class_='btn-success', style='margin: 0 3px;'),
-                                style='display:flex; justify-content: center'),
-                                ui.column(4,
-                                    ui.input_action_button('btn_undo_flag', 'Undo', class_='btn-light', style='margin: 0 3px;'),
-                                    ui.input_action_button('btn_redo_flag', 'Redo', class_='btn-light', style='margin: 0 3px;'),
-                                style='display:flex; justify-content: center'),
-                                ui.column(2),
-                            ),
-                            ui.row(
-                                output_widget('plot_data'),
-                            ),
-                        ),
-                    ),
-                    ui.br(),
-                ),
-                ui.nav_panel('Experimental 🧪',
-                    ui.input_select('sel_files_columns', 'File:', []), # FIXME: confusing name
-                    ui.row(
-                        ui.column(3,
-                            ui.input_selectize('sel_ph_col', 'Label as pH:', choices=[], multiple=True),
-                            ui.input_action_button('btn_ph_col_sel', 'Go', class_='btn-primary')
-                        ),
-                    style='flex-wrap: nowrap;'),
-                ),
-                ui.nav_spacer(),
-                ui.nav_control(
-                    ui.output_ui('show_download_button'),
-                ),
-                ui.nav_spacer(),
-                ui.nav_panel('Settings',
-                    ui.br(),
-                    ui.p('Under construction'),
-                ),
-                ui.nav_panel('Help',
-                    ui.p('Placeholder'),
-                ),
-            ),
-            ui.include_js('js/util.js'),
-            ui.include_css('css/misc.css'),
-    #title='Tool', # takes up too much space
-    window_title='Tool Prototype',
-    theme=shinyswatch.theme.darkly, # default theme
-)
 
 
 def server(input: Inputs, output: Outputs, session: Session):
@@ -254,6 +132,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         ui.update_select('sel_files_viz', choices=state.get_filenames())
         ui.update_select('sel_files_table', choices=state.get_filenames())
         ui.update_select('sel_files_columns', choices=state.get_filenames())
+        ui.update_select('sel_files_export', choices=state.get_filenames())
 
         upload_msg.set(upload_util.format_upload_msg(
             f'Loaded <code>{fname}</code> successfully.',
@@ -453,7 +332,7 @@ def server(input: Inputs, output: Outputs, session: Session):
 
         # Reorder columns so that date columns are shown first. Also, filter
         # out internal columns
-        order = file_obj.date_cols + [c for c in df.columns if c not in file_obj.date_cols and c not in INTERNAL_COLS]
+        order = file_obj.date_cols + [c for c in df.columns if c not in file_obj.date_cols and c not in m.INTERNAL_COLS]
         return df[order]
 
 
@@ -512,16 +391,16 @@ def server(input: Inputs, output: Outputs, session: Session):
         # outlier detection test to get a different shape+color combination.
         px_kwargs = {}
         if od_cols := od.get_od_names(df, x_col, y_col):
-            px_kwargs['color'] = px_kwargs['symbol'] = categ_name = 'Outlier Status'
+            px_kwargs['color'] = px_kwargs['symbol'] = categ_name = m.OUTLIER_TYPE
 
             df[categ_name] = df[od_cols].apply(util.get_true_first_column_name, axis=1)
             px_kwargs['category_orders'] = {
-                categ_name: [od.PASS] + od_cols # keep 'pass' first
+                categ_name: [m.PASS] + od_cols # keep 'pass' first
             }
         jlog1(f'od_cols: {od_cols}')
 
         # This will allow us to correlate selected data points with "df"
-        df['idx'] = df.index
+        df[m.IDX] = df.index
 
         # We need the graph as a widget so we can register callbacks. It might end up
         # being preferable to ditch plotly express and manually create the traces...
@@ -529,7 +408,7 @@ def server(input: Inputs, output: Outputs, session: Session):
             df,
             x=x_col,
             y=y_col,
-            custom_data='idx',
+            custom_data=m.IDX,
             **px_kwargs
         ))
 
@@ -537,9 +416,9 @@ def server(input: Inputs, output: Outputs, session: Session):
 
         jlog1(f'{len(fig.data)} trace(s)')
         for i, trace in enumerate(fig.data):
-            trace.on_selection(partial(gather_selection, trace_num=i))
+            trace.on_selection(partial(callback_data_selected, trace_num=i))
 
-        fig.data[0].on_deselect(clear_selection) # only need to clear selections once
+        fig.data[0].on_deselect(clear_selection) # we only need to clear the selection once
 
         return fig
 
@@ -547,11 +426,13 @@ def server(input: Inputs, output: Outputs, session: Session):
     # Note about callbacks: Plotly catches and completely ignores exceptions within
     # callback functions. We catch and print them to make debugging possible.
 
-    # Each trace has a 0-indexed x and y list of values. Here, we use these
-    # indices to get the indices in the original DataFrame.
+    # This is executed on each trace in the graph (i.e. each set of labeled points,
+    # like "pass", "test1", "test2", etc). Each trace has a 0-indexed list of indices -
+    # these are the points on the graph that have been selected. We use the customdata
+    # parameter set up for us to map these values to the values in the original DataFrame.
     @util.catch_errors
     @print_func_name
-    def gather_selection(trace, points, selector, trace_num: int) -> None:
+    def callback_data_selected(trace, points, selector, trace_num: int) -> None:
         nonlocal selected_points
 
         jlog1(f'trace #{trace_num}: {trace.legendgroup}')
@@ -579,6 +460,21 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     @print_func_name
     def set_flags(indices: list, cols: list[str], value: bool|list[bool]) -> None:
+        '''
+        Updates the manual flags of the active dataframe. The whole dataframe won't be
+        updated, just the relevant rows and columns specified by "indices" and "cols",
+        respectively.
+
+        Parameters
+        ----------
+        indices : list
+            A list of index values belonging to the input dataframe to apply "value" to.
+        cols : list
+            List of columns to apply "value" to.
+        value : bool or list of bools
+            The value(s) we want to set our dataframe's selected rows/columns to.
+        '''
+
         req(selected_file := input.sel_files_viz())
 
         jlog1(indices)
@@ -592,14 +488,15 @@ def server(input: Inputs, output: Outputs, session: Session):
         with reactive.isolate():
             df = active_df()
 
+        # This makes use of pandas' overloaded assignment function, allowing a
+        # single value or list of values.
         df.loc[indices, cols] = value
-
-        #active_df.set(df.copy(deep=False))
 
         # See comment in do_outlier_detection function
         dfcp = df.copy(deep=False)
         user_state().get_file(selected_file).df = dfcp
         active_df.set(dfcp)
+
 
     def manual_flag(value: bool) -> None:
         req(selected_points)
@@ -693,7 +590,6 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     @print_func_name
     def reset_flag_stacks():
-        # Clear stacks
         nonlocal redo_stack, undo_stack
         undo_stack = []
         redo_stack = []
@@ -747,29 +643,56 @@ def server(input: Inputs, output: Outputs, session: Session):
         asyncio.create_task(update_button_class('btn_redo_flag', 'btn-info', 'btn-light'))
 
 
-    @render.ui
-    def show_download_button():
-        selected_file = input.sel_files_viz()
+    def get_export_file_name():
+        selected_file = input.sel_files_export()
         req(selected_file)
-        selected_file = util.remove_suffix(selected_file)
+        selected_ext = input.sel_export_format()
+        custom_fname = input.text_export_custom_fname()
 
-        # 0001f4be is another floppy disk option
-        return ui.download_button('download_data', f'\U0001f5ab {selected_file}', class_='btn-primary', style='width: auto; margin: 0 auto')
+        if custom_fname:
+            if selected_ext not in custom_fname:
+                custom_fname += selected_ext
+            return custom_fname
+
+        return f'{util.remove_suffix(selected_file)}_screened{selected_ext}'
+
+
+    @render.ui
+    @print_func_name('green')
+    def show_download_button():
+        fname = get_export_file_name()
+        jlog(fname)
+        return ui.download_button('download_data', fname, class_='btn-primary')
 
 
     @render.download(
-        filename=lambda: f'{util.remove_suffix(input.sel_files_viz())}_screened.csv'
+        filename=get_export_file_name
     )
-    async def download_data():
+    async def download_data(chunk_size=8192):
         df = active_df()
         req(df)
 
-        buffer = StringIO()
-        df.to_csv(buffer, index=False)
+        selected_ext = input.sel_export_format()
+        selected_export_options = input.export_settings()
+
+        header = 'include_header' in selected_export_options
+
+        if selected_ext == '.xlsx':
+            buffer = BytesIO()
+            df.to_excel(buffer, index=False, header=header)
+        else:
+            buffer = StringIO()
+            df.to_csv(buffer, index=False, header=header)
+
         buffer.seek(0)
 
-        for line in buffer:
-            yield line
+        while True:
+            # We don't seem to need to encode string values to binary
+            chunk = buffer.read(chunk_size)
+            if not chunk:
+                break
+            yield chunk
+            await asyncio.sleep(0) # allow event loop to switch tasks
 
     #@render.image
     #def logo():
@@ -777,6 +700,4 @@ def server(input: Inputs, output: Outputs, session: Session):
     #    return img
 
 
-
-
-app = App(app_ui, server, debug=False)
+app = App(app_ui.app_ui, server, debug=False)

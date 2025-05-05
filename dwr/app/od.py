@@ -9,19 +9,13 @@ import pandas as pd
 from pandas.api.types import is_datetime64_any_dtype
 
 import app_state
-
-# This is used to denote data that has not "failed" any outlier detection
-PASS = 'pass'
-
-MANUAL = 'manual_flag'
+from m import PASS, MANUAL, _F
 
 DATE_STRS = [ # maybe rename this
     'days',
     'hours',
     'minutes',
 ]
-
-_F = '_failed_'
 
 # Name a column that is the result of running outlier detection
 def get_od_name(test_name, x_col, y_col):
@@ -33,6 +27,7 @@ def get_od_name(test_name, x_col, y_col):
 
 def get_manual_col(y_col):
     return f'{y_col}_{MANUAL}'
+
 
 # Help identify all columns that are the result of running outlier detection on a column
 # or manual flagging.
@@ -46,7 +41,8 @@ def get_od_names(df, x_col, y_col):
         ))
     ]
 
-    # This feeds into how columns are sorted - we want manual flagging to appear first
+    # Keep this here for posterity - if we want manual flags to appear on the graph
+    # before other flag types, this code can be uncommented.
     #try:
     #    idx = ret.index(MANUAL)
     #    ret.insert(0, ret.pop(idx))
@@ -56,8 +52,8 @@ def get_od_names(df, x_col, y_col):
     return ret
 
 
-# A little hacky
-def get_all_od_names(df):
+# Hacky way to get the names of all possible outlier detection columns in a dataframe
+def get_all_od_names(df: pd.DataFrame):
     return get_od_names(df, '', '')
 
 
