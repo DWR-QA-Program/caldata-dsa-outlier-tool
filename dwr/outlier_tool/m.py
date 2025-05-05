@@ -2,6 +2,7 @@
 # 'm' stands for miscellaneous variables: it is kept short to promote code
 # readability at the expense of mild confusion upon first seeing it.
 #
+import shinyswatch
 
 #
 # Outlier detection column creation
@@ -42,3 +43,8 @@ DATETIMECOL = 'DATETIME'
 
 # Location of custom schema files
 SCHEMA_DIR = 'outlier_tool/schemas'
+
+# Sets the title of a user's browser tab
+WINDOW_TITLE = 'Tool Prototype'
+
+DEFAULT_THEME = shinyswatch.theme.darkly
