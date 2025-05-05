@@ -1,0 +1,76 @@
+{
+    "name": "O&M",
+    "description": "Data dictionary provided by Daniel Wisheropp from the O&M team",
+    "columns": [
+        {
+            "name": "SITE_NAME",
+            "type": "str",
+            "description": "Three character code for this station"
+        },
+        {
+            "name": "DATETIME",
+            "type": "datetime",
+            "description": "Date and time of the record in the format 'yyyy-mm-dd hh:mm:ss"
+        },
+        {
+            "name": "SPECIFIC_CONDUCTANCE",
+            "type": "float",
+            "units": "uS/cm"
+        },
+        {
+            "name": "WATER_TEMPERATURE",
+            "type": "float",
+            "units": "°C"
+        },
+        {
+            "name": "TURBIDITY",
+            "type": "float",
+            "units": "NTU"
+        },
+        {
+            "name": "pH",
+            "type": "float",
+            "units": "pH"
+        },
+        {
+            "name": "FLUORESCENCE",
+            "type": "float",
+            "units": "RFU"
+        },
+        {
+            "name": "WIND_SPEED",
+            "type": "float",
+            "units": "MPH"
+        },
+        {
+            "name": "WIND_DIRECTION",
+            "type": "float",
+            "units": "Degrees"
+        },
+        {
+            "name": "AIR_TEMPERATURE",
+            "type": "float",
+            "units": "°F"
+        },
+        {
+            "name": "PRECIPITATION",
+            "type": "float",
+            "units": "Inches"
+        },
+        {
+            "name": "C3_PHYCOCYANIN",
+            "type": "float",
+            "units": "RFUB"
+        },
+        {
+            "name": "C3_FLUORESCENCE",
+            "type": "float",
+            "units": "RFUB"
+        },
+        {
+            "name": "C3_PHYCOCYANIN_PPB",
+            "type": "float",
+            "units": "ppb"
+        }
+    ]
+}

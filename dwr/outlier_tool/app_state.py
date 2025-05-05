@@ -1,9 +1,10 @@
 import pandas as pd
 from shiny import ui
 
-import m
-import util
-import upload_util
+from . import m
+from . import util
+from . import upload_util
+from .schema import find_matching_schema
 
 # Tracks the state of a user's session
 class State():
@@ -26,10 +27,23 @@ class File():
     def __init__(self, name, df):
         self.name = name
         self.df = df
+        self.schema = None
         self.composite_date_col = None
         self.last_selected_x_col = None
         self.last_selected_y_col = None
         self.od_results = {}
+
+
+        # Match schema to file if possible
+        if schema := find_matching_schema(self.df):
+            self.schema = schema
+            # Rename columns if input file had no header
+            if list(df.columns)[0] == 'col0':
+                self.df.rename(
+                    {src: trg.name for src, trg in zip(df.columns, schema.columns)},
+                    axis='columns',
+                    inplace=True,
+                )
 
         self.date_cols = upload_util.get_date_cols(self.df)
         self.num_cols = upload_util.get_num_cols(self.df)
@@ -39,7 +53,7 @@ class File():
         for col in self.date_cols:
             self.df[col] = self.df[col].apply(upload_util.try_parse_date)
 
-        # Remove any supposed date columns that were not successfully converted
+        # Remove date label from any supposed date columns that were not successfully converted
         self.date_cols = [col for col in self.date_cols if pd.api.types.is_datetime64_any_dtype(self.df[col])]
 
         if not self.date_cols:
@@ -54,6 +68,7 @@ class File():
                         self.num_cols.remove(col)
                     except ValueError:
                         pass
+
 
 
     def save_od_result(self, test_name, x_col, y_col, result):

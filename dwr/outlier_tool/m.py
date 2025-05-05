@@ -39,3 +39,6 @@ INTERNAL_COLS = [
 
 # Column name of any datetime column created by the tool
 DATETIMECOL = 'DATETIME'
+
+# Location of custom schema files
+SCHEMA_DIR = 'outlier_tool/schemas'

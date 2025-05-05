@@ -4,8 +4,8 @@ from shiny import ui
 from shinywidgets import output_widget
 import shinyswatch
 
-import od
-import upload_util
+from . import od
+from . import upload_util
 
 app_ui = ui.page_sidebar(
             ui.sidebar(
@@ -35,7 +35,7 @@ app_ui = ui.page_sidebar(
                                     'upload_nullify_hyphens',
                                 ]
                             ),
-                            ui.input_file('file1', 'Choose CSV File:', accept=['.csv',], multiple=False),
+                            ui.input_file('file1', 'Choose File:', accept=['.csv', '.prn'], multiple=False),
                         ),
                         ui.column(4,
                             ui.output_ui('upload_text'),
@@ -138,8 +138,8 @@ app_ui = ui.page_sidebar(
                     ui.p('Placeholder'),
                 ),
             ),
-            ui.include_js('js/util.js'),
-            ui.include_css('css/misc.css'),
+            ui.include_js('outlier_tool/js/util.js'),
+            ui.include_css('outlier_tool/css/misc.css'),
     #title='Tool', # takes up too much space
     window_title='Tool Prototype',
     theme=shinyswatch.theme.darkly, # default theme
