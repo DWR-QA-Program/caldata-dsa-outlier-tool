@@ -139,8 +139,8 @@ app_ui = ui.page_sidebar(
                     ui.p('Placeholder'),
                 ),
             ),
-            ui.include_js('outlier_tool/js/util.js'),
-            ui.include_css('outlier_tool/css/misc.css'),
+            ui.include_js(m.JS_UTIL),
+            ui.include_css(m.CSS_MISC),
     #title='Tool', # takes up too much space
     window_title=m.WINDOW_TITLE,
     theme=m.DEFAULT_THEME,

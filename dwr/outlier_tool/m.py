@@ -5,6 +5,17 @@
 import shinyswatch
 
 #
+# File paths that enhance the tool's usability
+#
+
+# Directory of custom schema files
+SCHEMA_DIR = 'outlier_tool/schemas'
+
+# Paths of custom javascript/CSS files
+JS_UTIL = 'outlier_tool/js/util.js'
+CSS_MISC = 'outlier_tool/css/misc.css'
+
+#
 # Outlier detection column creation
 #
 
@@ -40,9 +51,6 @@ INTERNAL_COLS = [
 
 # Column name of any datetime column created by the tool
 DATETIMECOL = 'DATETIME'
-
-# Location of custom schema files
-SCHEMA_DIR = 'outlier_tool/schemas'
 
 # Sets the title of a user's browser tab
 WINDOW_TITLE = 'Tool Prototype'
