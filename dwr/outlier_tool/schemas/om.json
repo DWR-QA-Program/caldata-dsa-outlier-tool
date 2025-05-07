@@ -29,8 +29,7 @@
         },
         {
             "name": "pH",
-            "type": "float",
-            "units": "pH"
+            "type": "float"
         },
         {
             "name": "FLUORESCENCE",
