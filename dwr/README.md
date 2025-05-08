@@ -1,13 +1,3 @@
-## Source code descriptions
-
-- `app.py`: most code lives here! This file's primary purpose is to serve as the interface between our custom python code and the py-shiny library.
-- `app_state.py`: objects to support a user moving through the process of importing, screening, and exporting a file.
-- `app_ui.py`: layout hierarchy for the app's user interface.
-- `m.py`: miscellaneous variables
-- `od.py`: outlier detection functions and related utility functions.
-- `upload_util.py`: utility functions specifically related to importing files into the tool.
-- `util.py`: common utility functions
-
 ## Local Server Setup
 
 Your python environment manager will be assumed to be some flavor of Anaconda. Some additional info can be found [here](https://cagov.github.io/data-infrastructure/code/local-setup/#1-set-up-a-python-virtual-environment).
@@ -33,10 +23,28 @@ Your python environment manager will be assumed to be some flavor of Anaconda. S
 
 ### 3. Running the tool
 
-At this point, all project dependencies should be installed. Running the tool is as simple as executing 1 command from within the `app` directory:
+At this point, all project dependencies should be installed. Running the tool is as simple as executing 1 command from within the `dwr` directory:
 
 ```bash
-shiny run app.py
+shiny run main.py
 ```
 
 This will start the tool as a local server. To access the tool at the default port, navigate to [http://127.0.0.1:8000](http://127.0.0.1:8000). See `shiny run --help` for additional, optional CLI arguments.
+
+## Running unit tests
+
+Assuming the above setup steps have been completed, running unit tests will only require executing the `pytest` command. Example output:
+
+```
+# pytest
+========================================= test session starts =========================================
+platform linux -- Python 3.10.16, pytest-8.3.5, pluggy-1.5.0
+rootdir: /home/user/subfolder/caldata-dsa-dwr
+configfile: pyproject.toml
+plugins: anyio-4.9.0, shiny-1.4.0
+collected 5 items
+
+tests/test_upload_util.py .....                                                                 [100%]
+
+========================================== 5 passed in 0.38s ==========================================
+```
