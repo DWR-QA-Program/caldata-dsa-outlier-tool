@@ -1,9 +1,3 @@
-# Outlier detection functions
-#
-# NOTE: The app calls outlier detection functions using the **kwargs construct.
-#       Due to this, changing the names of these functions arguments also requires
-#       changing values in the OD_IMPLEMENTED dictionary.
-
 import numpy as np
 import pandas as pd
 from pandas.api.types import is_datetime64_any_dtype
@@ -11,16 +5,16 @@ from pandas.api.types import is_datetime64_any_dtype
 from . import app_state
 from .m import PASS, MANUAL, _F
 
-DATE_STRS = [ # maybe rename this
+DATE_STRS = [
     'days',
     'hours',
     'minutes',
 ]
 
-# Name a column that is the result of running outlier detection
+
 def get_od_name(test_name, x_col, y_col):
     if y_col is None:
-        return f'{x_col}{_F}{test_name}' # whole time series under question
+        return f'{x_col}{_F}{test_name}'
     else:
         return f'{x_col}_{y_col}{_F}{test_name}'
 
@@ -29,39 +23,15 @@ def get_manual_col(y_col):
     return f'{y_col}_{MANUAL}'
 
 
-# Help identify all columns that are the result of running outlier detection on a column
-# or manual flagging.
 def get_od_names(df, x_col, y_col):
-    ret = [col
-        for col in df.columns
-        if any((
-            get_od_name('', x_col, y_col) in col,
-            get_od_name('', x_col, None) in col,
-            get_manual_col(y_col) in col,
-        ))
-    ]
-
-    # Keep this here for posterity - if we want manual flags to appear on the graph
-    # before other flag types, this code can be uncommented.
-    #try:
-    #    idx = ret.index(MANUAL)
-    #    ret.insert(0, ret.pop(idx))
-    #except ValueError: # not found in list
-    #    pass
-
+    ret = [col for col in df.columns if any((get_od_name('', x_col, y_col) in col, get_od_name('', x_col, None) in col, get_manual_col(y_col) in col))]
     return ret
 
 
-# Hacky way to get the names of all possible outlier detection columns in a dataframe
 def get_all_od_names(df: pd.DataFrame):
     return get_od_names(df, '', '')
 
 
-# Help rename plotly elements so that they don't display our ugly internal column names.
-# Does nothing if outlier detection hasn't been executed yet.
-#
-# Note that we use internal column names as *values inside a column* to control plot
-# markers (color & shape). That is what gets changed here.
 def prettify_column_names(figure, od_cols) -> None:
     renames = {
         col: MANUAL if MANUAL in col else col[col.find(_F):].lstrip('_')
@@ -70,13 +40,12 @@ def prettify_column_names(figure, od_cols) -> None:
     if renames:
         renames[PASS] = PASS
         figure.for_each_trace(lambda x: x.update(
-                name = renames[x.name],
-                legendgroup = renames[x.name],
-                hovertemplate = x.hovertemplate.replace(x.name, renames[x.name])
+                name=renames[x.name],
+                legendgroup=renames[x.name],
+                hovertemplate=x.hovertemplate.replace(x.name, renames[x.name])
             ))
 
 
-# Tests than can be run on any table
 def get_default_tests():
     return {
         'x': [time_gap_test_auto],
@@ -128,7 +97,7 @@ def gross_range_test(ts, minimum, maximum) -> pd.Series:
     -------
     pandas.Series
         The original time series where True values are outside the bounds and False values are inside.
-    
+
     Examples
     --------
     >>> df['failed_test'] = gross_range_test(df['test_column'], 0, 100)
@@ -153,13 +122,15 @@ def gross_range_test(ts, minimum, maximum) -> pd.Series:
 
 def time_gap_test_auto(ts: pd.Series) -> pd.Series:
     return time_gap_test(ts, None, None, ts.diff().median())
-    
+
 
 def time_gap_test(ts: pd.Series, number: int, unit: str, delta=None) -> pd.Series:
     '''
-    Apply a time gap test. Any gap between data points, either larger or smaller than
-the provided cadence, will be flagged as invalid.  Specifically, the value that
-*follows* a gap will be flagged as failing this test.
+    Apply a time gap test.
+
+    Any gap between data points, either larger or smaller than
+    the provided cadence, will be flagged as invalid.  Specifically, the value that
+    *follows* a gap will be flagged as failing this test.
 
     Parameters
     ----------
@@ -193,21 +164,16 @@ the provided cadence, will be flagged as invalid.  Specifically, the value that
         raise ValueError(f'Input date types must be one of: {DATE_STRS}.')
 
     cadence = pd.Timedelta(number, unit) if delta is None else delta
-
     output_ts = ts.diff() != cadence
-
-    # Since the first value has nothing to be compared to, it will always be True.
-    # Manually set it to False to prevent confusion.
     output_ts.iloc[0] = False
 
     return output_ts
 
 
-# TODO: test this function
 def value_gap_test(ts: pd.Series) -> pd.Series:
     '''
     Apply a value gap test to a time series.
-    
+
     Parameters
     ----------
     ts : pd.Series
@@ -239,7 +205,7 @@ def flat_line_test(ts: pd.Series, number_of_repeated_values: int = 2) -> pd.Seri
     ----------
     ts : pd.Series
         A pandas series.
-    
+
     number_of_repeated_values : int
         The number of consecutive repeated values to indicate an instrumental anomaly (must be > 1).
 
@@ -247,7 +213,7 @@ def flat_line_test(ts: pd.Series, number_of_repeated_values: int = 2) -> pd.Seri
     -------
     pandas.Series
         A series where repeated input values are represented as True values. Repeated missing/null values are not flagged.
-    
+
     Examples
     --------
     >>> df['failed_test'] = flat_line_test(df['test_column'])
@@ -257,19 +223,9 @@ def flat_line_test(ts: pd.Series, number_of_repeated_values: int = 2) -> pd.Seri
         raise ValueError('No input data.')
     if number_of_repeated_values <= 1:
         raise ValueError('number_of_repeated_values parameter must be > 1.')
-
-    value_mismatches_prev = ts != ts.shift(1)
-
-    # Create groups of consecutive repeated values. Cumsum will increment the
-    # count when values change, resulting in integers we can use as groups
-    group_ids = value_mismatches_prev.cumsum()
-
-    # Count the size of each group
-    group_sizes = ts.groupby(group_ids).transform('size')
-
-    # Our output will be the groups with a size larger than the tolerable value
-    output_ts = group_sizes >= number_of_repeated_values
-
+    mask = ts.ne(ts.shift())
+    counts = ts.groupby(mask.cumsum()).transform('count')
+    output_ts = counts >= number_of_repeated_values
     return output_ts
 
 
