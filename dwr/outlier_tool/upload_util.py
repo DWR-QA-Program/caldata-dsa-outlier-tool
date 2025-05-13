@@ -8,9 +8,9 @@ from pandas.api.types import is_numeric_dtype
 
 from shiny import ui
 
-import util
-from util import to_html_list, jlog1, print_func_name
-from m import DATETIMECOL
+from . import util
+from .util import to_html_list, jlog1, print_func_name
+from .m import DATETIMECOL
 
 
 def read_csv(fpath, options):
@@ -20,10 +20,14 @@ def read_csv(fpath, options):
 
     if header is None:
         df.rename(
-            {col: f'col{col}' for col in df.columns},
+            {col: f'col{i}' for i, col in enumerate(df.columns)},
             axis='columns',
             inplace=True,
         )
+
+    # Ensure column names are unique - this is needed for the explore tab since the
+    # render function only accepts unique column names.
+    df = deduplicate_columns(df)
 
     return df
 
@@ -274,3 +278,39 @@ def nullify_hyphens(df) -> tuple[list[str], list[str]]:
             attempted.append(col)
 
     return fixed, attempted
+
+
+def deduplicate_columns(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+    Renames duplicate DataFrame column names by appending '_1', '_2', etc.
+
+    Modifies the DataFrame in place and returns it.
+
+    Args:
+        df (pd.DataFrame): The input DataFrame.
+
+    Returns:
+        pd.DataFrame: The DataFrame with deduplicated column names.
+    '''
+    new_cols = []
+
+    for col in df.columns:
+        original_col = str(col) # Our columns shouldn't be integers but this is for safety
+
+        # Handle the rare case where the input column collides with an existing column but
+        # already follows the format we're outputting.
+        if original_col in new_cols and '_' in original_col:
+            original_col = '_'.join(original_col.split('_')[:-1]) # strips "_1" or "_2", for example
+
+        current_col_name = original_col
+        count = 0
+
+        # Make sure the generated/original name hasn't been used yet in the final list
+        while current_col_name in new_cols:
+            count += 1
+            current_col_name = f'{original_col}_{count}'
+
+        new_cols.append(current_col_name)
+
+    df.columns = new_cols
+    return df

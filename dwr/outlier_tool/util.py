@@ -12,7 +12,8 @@ from pandas.api.types import is_numeric_dtype
 
 import shiny
 from shiny import ui
-from m import PASS
+
+from .m import PASS
 
 LOG_MSG = 0
 

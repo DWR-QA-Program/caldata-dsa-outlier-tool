@@ -20,13 +20,13 @@ import shinyswatch
 import plotly.express as px
 import plotly.graph_objs as go
 
-import m
-import od
-import app_ui
-import util
-import app_state
-import upload_util
-from util import print_func_name, jlog, jlog1, jlog2
+from . import m
+from . import od
+from . import app_ui
+from . import util
+from . import app_state
+from . import upload_util
+from .util import print_func_name, jlog, jlog1, jlog2
 
 
 def req(variable):

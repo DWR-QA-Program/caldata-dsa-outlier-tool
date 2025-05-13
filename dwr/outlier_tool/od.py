@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import is_datetime64_any_dtype
 
-import app_state
-from m import PASS, MANUAL, _F
+from . import app_state
+from .m import PASS, MANUAL, _F
 
 DATE_STRS = [ # maybe rename this
     'days',
