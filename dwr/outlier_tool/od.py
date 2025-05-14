@@ -5,13 +5,6 @@ from pandas.api.types import is_datetime64_any_dtype
 from . import app_state
 from .m import PASS, MANUAL, _F
 
-DATE_STRS = [
-    'days',
-    'hours',
-    'minutes',
-]
-
-
 def get_od_name(test_name, x_col, y_col):
     if y_col is None:
         return f'{x_col}{_F}{test_name}'
@@ -80,7 +73,7 @@ def pH_range_test(ts) -> pd.Series:
     return gross_range_test(ts, 0, 14)
 
 
-def gross_range_test(ts, minimum, maximum) -> pd.Series:
+def gross_range_test(ts: pd.Series, minimum: float, maximum: float) -> pd.Series:
     '''
     Apply a gross range test to a time series.
 
@@ -88,34 +81,33 @@ def gross_range_test(ts, minimum, maximum) -> pd.Series:
     ----------
     ts : pandas.Series
         The time series to be tested.
+
     minimum : float
         The lower bounds for the test (can be None if maximum is not None).
+
     maximum : float
         The upper bounds for the test (can be None if minimum is not None).
 
     Returns
     -------
     pandas.Series
-        The original time series where True values are outside the bounds and False values are inside.
+        A time series where True indicates values outside the bounds and False indicates otherwise.
 
     Examples
     --------
-    >>> df['failed_test'] = gross_range_test(df['test_column'], 0, 100)
+    >>> output_ts = gross_range_test(ts=df['test_column'], minimum=0, maximum=100)
 
     '''
     if ts.empty:
         raise ValueError('No input data.')
-    if minimum is None and maximum is None:
-        raise ValueError('At least 1 min/max parameter must be specified.')
+    if minimum is None:
+        raise ValueError('Minimum must be specified.')
+    if maximum is None:
+        raise ValueError('Maximum must be specified.')
+    if minimum > maximum:
+        raise ValueError('Maximum value cannot be less than minimum value.')
 
-    if minimum is not None and maximum is not None:
-        if minimum > maximum:
-            raise ValueError('Minimum value cannot exceed maximum value')
-        output_ts = (ts > maximum) | (ts <= minimum)
-    elif minimum is not None:
-        output_ts = ts <= minimum
-    else:
-        output_ts = ts > maximum
+    output_ts = (ts > maximum) | (ts <= minimum)
 
     return output_ts
 
@@ -124,7 +116,7 @@ def time_gap_test_auto(ts: pd.Series) -> pd.Series:
     return time_gap_test(ts, None, None, ts.diff().median())
 
 
-def time_gap_test(ts: pd.Series, number: int, unit: str, delta=None) -> pd.Series:
+def time_gap_test(ts: pd.Series, number: int, unit: str) -> pd.Series:
     '''
     Apply a time gap test.
 
@@ -135,37 +127,37 @@ def time_gap_test(ts: pd.Series, number: int, unit: str, delta=None) -> pd.Serie
     Parameters
     ----------
     ts : pd.Series
-        A pandas series with a datetime data type.
+        A pandas series with a datetime index.
 
     number : int
-        number of (ex: days, hours, etc) to define the expected cadence of the data.
+        Number (ex: 1, 2) to define the expected cadence of the data.
 
     unit : str
-        Type of time unit to measure (ex: days, hours). pandas.Timedelta must support this.
-
-    delta : pd.Timedelta
-        Optional argument that overrides the "number" and "unit" arguments.
+        String (ex: days, hours) to define the time unit to measure. pandas.Timedelta must support this.
 
     Returns
     -------
     pd.Series
-        A boolean series with the same index as time_series.
+        A series where True designates missing values and False designates otherwise.
 
     Examples
     --------
-    >>> df['failed_test'] = time_gap_test(df['test_column'], number=1, unit='days'))
+    >>> output_ts = time_gap_test(ts=df['test_column'], number=1, unit='days'))
 
     '''
     if ts.empty:
         raise ValueError('No input data.')
     if not is_datetime64_any_dtype(ts):
         raise ValueError('Input date column does not have a valid datetime data type.')
-    if unit not in DATE_STRS and delta is None:
-        raise ValueError(f'Input date types must be one of: {DATE_STRS}.')
+    try:
+        item_try = pd.Timedelta(number, unit)
+    except ValueError as item_try:
+        print(str(item_try))
+        print("Use 'hours', 'minutes', or 'days'.")
+        return np.nan
 
-    cadence = pd.Timedelta(number, unit) if delta is None else delta
+    cadence = pd.Timedelta(number, unit)
     output_ts = ts.diff() != cadence
-    output_ts.iloc[0] = False
 
     return output_ts
 
@@ -182,11 +174,11 @@ def value_gap_test(ts: pd.Series) -> pd.Series:
     Returns
     -------
     pd.Series
-        A boolean series where True values designate missing values
+        A series where True designates missing values and False designates otherwise.
 
     Examples
     --------
-    >>> df['failed_test'] = value_gap_test(df['test_column'])
+    >>> output_ts = value_gap_test(ts=df['test_column'])
 
     '''
     if ts.empty:
@@ -197,7 +189,7 @@ def value_gap_test(ts: pd.Series) -> pd.Series:
     return output_ts
 
 
-def flat_line_test(ts: pd.Series, number_of_repeated_values: int = 2) -> pd.Series:
+def flat_line_test(ts: pd.Series, number_of_repeated_values: int = 3) -> pd.Series:
     '''
     Apply a flat line test to a time series.
 
@@ -207,7 +199,7 @@ def flat_line_test(ts: pd.Series, number_of_repeated_values: int = 2) -> pd.Seri
         A pandas series.
 
     number_of_repeated_values : int
-        The number of consecutive repeated values to indicate an instrumental anomaly (must be > 1).
+        The number of consecutive repeated values to indicate an instrumental anomaly (must be > 2).
 
     Returns
     -------
@@ -216,7 +208,7 @@ def flat_line_test(ts: pd.Series, number_of_repeated_values: int = 2) -> pd.Seri
 
     Examples
     --------
-    >>> df['failed_test'] = flat_line_test(df['test_column'])
+    >>> output_ts = flat_line_test(ts=df['test_column'])
 
     '''
     if ts.empty:
