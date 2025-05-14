@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+
+from scipy import stats
 from pandas.api.types import is_datetime64_any_dtype
 
 from . import app_state
