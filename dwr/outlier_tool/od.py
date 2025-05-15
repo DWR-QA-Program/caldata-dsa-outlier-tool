@@ -223,7 +223,7 @@ def flat_line_test(ts: pd.Series, number_of_repeated_values: int = 3) -> pd.Seri
     return output_ts
 
 
-def z_score_test(ts: pd.Series, number_of_standard_deviations: int=3) -> pd.Series:
+def z_score_test(ts: pd.Series, number_of_standard_deviations: int = 3) -> pd.Series:
     """
     Apply the Scipy Z-Score test to a time series. Flag values based on the number of standard deviations from the mean.
 
@@ -252,7 +252,7 @@ def z_score_test(ts: pd.Series, number_of_standard_deviations: int=3) -> pd.Seri
     return output_ts
 
 
-def modified_z_score_test(ts: pd.Series, median_absolute_deviation: float=4) -> pd.Series:
+def modified_z_score_test(ts: pd.Series, median_absolute_deviation: float = 4) -> pd.Series:
     """
     Apply the Scipy Z-Score test to a time series. Flag values based on the number of standard deviations from the mean.
 
