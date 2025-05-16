@@ -6,8 +6,9 @@
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_datetime64_any_dtype
 
+from pandas.api.types import is_datetime64_any_dtype
+from scipy import stats
 from . import app_state
 from .m import PASS, MANUAL, _F
 
