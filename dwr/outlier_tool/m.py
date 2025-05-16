@@ -2,6 +2,7 @@
 # 'm' stands for miscellaneous variables: it is kept short to promote code
 # readability at the expense of mild confusion upon first seeing it.
 #
+import os
 import shinyswatch
 
 #
@@ -44,7 +45,13 @@ DATETIMECOL = 'DATETIME'
 # Location of custom schema files
 SCHEMA_DIR = 'outlier_tool/schemas'
 
+# Location of icon files
+ICONS_DIR = 'outlier_tool/icons'
+DOTTED_BOX_ICON = os.path.join(ICONS_DIR, 'graph-selection-box.svg')
+TRASH_ICON = os.path.join(ICONS_DIR, 'trash.svg')
+
 # Sets the title of a user's browser tab
 WINDOW_TITLE = 'Tool Prototype'
 
 DEFAULT_THEME = shinyswatch.theme.darkly
+

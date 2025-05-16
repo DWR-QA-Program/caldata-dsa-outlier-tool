@@ -1,11 +1,46 @@
 /* Make the notification box a little bigger */
 #shiny-notification-panel {
-    zoom: 1.2;
+    zoom: 1.1;
 }
 
-/* Make the "upload complete" not clip. TODO: make look better */
-/*div > div.progress-bar {
+/*
+ * By default, the upload progress bar clips the "upload complete" text in an ugly
+ * way. The customizations below do the following:
+ * 1. Unclip the text by enabling overflow on the parent object
+ * 2. Add back a border-radius so the progress bar isn't a block (the parent object needs
+ *    a slightly larger radius or it will be visible behind the progress bar)
+ * 3. Shrink down the bar's height so that it looks better.
+ */
 .shiny-file-input-progress {
     overflow: visible;
     border-radius: 10px;
-}*/
+    height: 80%;
+}
+.shiny-file-input-progress .progress-bar {
+    border-radius: 6px;
+    height: 80%;
+}
+
+/* Add a little space between titles and their surrounding content */
+.tab-title {
+    padding-top: .5em;
+    padding-bottom: .5em;
+}
+
+/* The upload box takes up too much horizontal space - manually limit it */
+#upload_well > .shiny-input-container {
+    max-width: 20em;
+}
+
+/* Make trash icon color match text around it by default*/
+.clickable-accordion-trash-icon {
+    fill: currentColor;
+}
+/* Help the user know the icon is clickable */
+.clickable-accordion-trash-icon:hover {
+    fill: red;
+}
+
+.glow {
+    box-shadow: 0 0 8px 8px var(--bs-nav-pills-link-active-bg);
+}

@@ -8,6 +8,7 @@ from functools import wraps
 
 import numpy as np
 import pandas as pd
+from htmltools import TagChild
 from pandas.api.types import is_numeric_dtype
 
 import shiny
@@ -94,6 +95,14 @@ def danger(msg):
     return ui.p(msg, class_='text-danger')
 def info(msg):
     return ui.p(msg, class_='text-info')
+
+
+def show_info(msg: TagChild, duration=3):
+    ui.notification_show(msg, duration=duration, type='info')
+def show_warning(msg: TagChild, duration=3):
+    ui.notification_show(msg, duration=duration, type='warning')
+def show_danger(msg: TagChild, duration=3):
+    ui.notification_show(msg, duration=duration, type='danger')
 
 
 def to_html_list(items):

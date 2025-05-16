@@ -15,62 +15,79 @@
         {
             "name": "SPECIFIC_CONDUCTANCE",
             "type": "float",
-            "units": "uS/cm"
+            "units": "uS/cm",
+            "min": 0
         },
         {
             "name": "WATER_TEMPERATURE",
             "type": "float",
-            "units": "°C"
+            "units": "°C",
+            "min": 0,
+            "max": 100
         },
         {
             "name": "TURBIDITY",
             "type": "float",
-            "units": "NTU"
+            "units": "NTU",
+            "min": 0
         },
         {
             "name": "pH",
             "type": "float",
-            "units": "pH"
+            "units": "pH",
+            "min": 0,
+            "max": 14
         },
         {
             "name": "FLUORESCENCE",
             "type": "float",
-            "units": "RFU"
+            "units": "RFU",
+            "min": 0
         },
         {
             "name": "WIND_SPEED",
             "type": "float",
-            "units": "MPH"
+            "units": "MPH",
+            "min": 0
         },
         {
             "name": "WIND_DIRECTION",
             "type": "float",
-            "units": "Degrees"
+            "units": "Degrees",
+            "min": 0,
+            "max": 360
         },
         {
             "name": "AIR_TEMPERATURE",
             "type": "float",
-            "units": "°F"
+            "units": "°F",
+            "min": -273,
+            "max": 200
         },
         {
             "name": "PRECIPITATION",
             "type": "float",
-            "units": "Inches"
+            "units": "Inches",
+            "min": 0
         },
         {
             "name": "C3_PHYCOCYANIN",
             "type": "float",
-            "units": "RFUB"
+            "units": "RFUB",
+            "min": 0
         },
         {
             "name": "C3_FLUORESCENCE",
             "type": "float",
-            "units": "RFUB"
+            "units": "RFUB",
+            "min": 0
         },
         {
             "name": "C3_PHYCOCYANIN_PPB",
             "type": "float",
-            "units": "ppb"
+            "units": "ppb",
+            "min": 0,
+            "max": 1000000000
         }
     ]
 }
