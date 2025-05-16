@@ -6,8 +6,9 @@
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_datetime64_any_dtype
 
+from pandas.api.types import is_datetime64_any_dtype
+from scipy import stats
 from . import app_state
 from .m import PASS, MANUAL, _F
 
@@ -128,7 +129,7 @@ def gross_range_test(ts, minimum, maximum) -> pd.Series:
     -------
     pandas.Series
         The original time series where True values are outside the bounds and False values are inside.
-    
+
     Examples
     --------
     >>> df['failed_test'] = gross_range_test(df['test_column'], 0, 100)
@@ -153,7 +154,7 @@ def gross_range_test(ts, minimum, maximum) -> pd.Series:
 
 def time_gap_test_auto(ts: pd.Series) -> pd.Series:
     return time_gap_test(ts, None, None, ts.diff().median())
-    
+
 
 def time_gap_test(ts: pd.Series, number: int, unit: str, delta=None) -> pd.Series:
     '''
@@ -207,7 +208,7 @@ the provided cadence, will be flagged as invalid.  Specifically, the value that
 def value_gap_test(ts: pd.Series) -> pd.Series:
     '''
     Apply a value gap test to a time series.
-    
+
     Parameters
     ----------
     ts : pd.Series
@@ -239,7 +240,7 @@ def flat_line_test(ts: pd.Series, number_of_repeated_values: int = 2) -> pd.Seri
     ----------
     ts : pd.Series
         A pandas series.
-    
+
     number_of_repeated_values : int
         The number of consecutive repeated values to indicate an instrumental anomaly (must be > 1).
 
@@ -247,7 +248,7 @@ def flat_line_test(ts: pd.Series, number_of_repeated_values: int = 2) -> pd.Seri
     -------
     pandas.Series
         A series where repeated input values are represented as True values. Repeated missing/null values are not flagged.
-    
+
     Examples
     --------
     >>> df['failed_test'] = flat_line_test(df['test_column'])
@@ -270,6 +271,160 @@ def flat_line_test(ts: pd.Series, number_of_repeated_values: int = 2) -> pd.Seri
     # Our output will be the groups with a size larger than the tolerable value
     output_ts = group_sizes >= number_of_repeated_values
 
+    return output_ts
+
+def z_score_test(ts: pd.Series, number_of_standard_deviations: int = 3) -> pd.Series:
+    """
+    Apply the Scipy Z-Score test to a time series. Flag values based on the number of standard deviations from the mean.
+
+    Parameters
+    ----------
+    ts : pd.Series
+        A pandas series with a datetime index.
+
+    number_of_standard_deviations : int, optional
+        The number of standard deviations from the mean to flag. Default is 3.
+
+    Returns
+    -------
+    pandas.Series
+        Outliers flagged as True or False.
+
+    Examples
+    --------
+    >>> output_ts = z_score_test(ts=df.VALUE)
+
+    """
+    if ts.empty:
+        raise ValueError('No input data.')
+    z_score = stats.zscore(ts, nan_policy='omit')
+    output_ts = np.abs(z_score) >= number_of_standard_deviations
+    return output_ts
+
+
+def modified_z_score_test(ts: pd.Series, median_absolute_deviation: float = 4) -> pd.Series:
+    """
+    Apply the Scipy Z-Score test to a time series. Flag values based on the number of standard deviations from the mean.
+
+    Parameters
+    ----------
+    ts : pd.Series
+        A pandas series with a datetime index.
+
+    median_absolute_deviation : float, optional
+        The threshold defining the maximum allowable median absolute deviation. Default is 4.
+
+    Returns
+    -------
+    pandas.Series
+        Outliers flagged as True or False.
+
+    Examples
+    --------
+    >>> output_ts = z_score_test(ts=df.VALUE)
+
+    """
+    if ts.empty:
+        raise ValueError('No input data.')
+    modified_z_score = (stats.norm.ppf(3/4) * (ts - ts.median())) / (stats.median_abs_deviation(ts, nan_policy='omit'))
+    output_ts = np.abs(modified_z_score) >= median_absolute_deviation
+    return output_ts
+
+
+def tukey_iqr_test(ts: pd.Series) -> pd.DataFrame:
+    """
+    Apply Tukey's IQR test to a time series.
+
+    Parameters
+    ----------
+    ts : pd.Series
+        A pandas series with a datetime index.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Outliers flagged as True or False.
+
+    Examples
+    --------
+    >>> df_out = tukey_iqr_test(ts)
+
+    """
+    if ts.empty:
+        raise ValueError('No input data.')
+    c = stats.norm.ppf(3 / 4) - stats.norm.ppf(1 / 4)
+    quantiles = ts.quantile([0.25, 0.75])
+    np.squeeze(np.diff(quantiles, axis=0) / c)
+    iqr = quantiles[0.75] - quantiles[0.25]
+    upper_limit = quantiles[0.75] + (iqr*1.5)
+    lower_limit = quantiles[0.25] - (iqr*1.5)
+    output_ts = ((ts > upper_limit) | (ts < lower_limit))
+    return output_ts
+
+
+def spike_detection_test(ts: pd.Series, factor: float = 1.05) -> pd.DataFrame:
+    """
+    Identify a spike, defined as a value greater than the mean*factor of the adjacent values, in a time series.
+
+    Parameters
+    ----------
+    ts : pd.Series
+        A pandas series with a datetime index.
+
+    factor : float, optional
+        The factor by which the mean of adjacent values is multiplied to determine a spike.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Outliers flagged as True or False.
+
+    Examples
+    --------
+    >>> df_out = spike_detection_test(ts)
+
+    """
+    if ts.empty:
+        raise ValueError('No input data.')
+    mean_adjacent = (ts.shift(1) + ts.shift(-1)) / 2
+    output_ts = ts > factor*mean_adjacent
+    return output_ts
+
+
+def rate_of_change_test(ts: pd.Series, threshold_value: float, previous_number_of_points: int = 5) -> pd.DataFrame:
+    """
+    The Rate of Change Test compares determines if two values exeed a threshood.
+
+    Specifically, the test compares the mean value of the N-m points, where m
+    indicates the number of previous points, to the Nth point and
+    determines if the difference between those two numbers exceeds a threshold.
+
+    Parameters
+    ----------
+    ts : pd.Series
+        A pandas series with a datetime index.
+
+    threshold_value : float
+        The threshold value for the difference.
+
+    previous_number_of_points : int, optional
+        The number of previous points to consider for the mean calculation. Default is 5.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Outliers flagged as True or False.
+
+    Examples
+    --------
+    >>> df_out = spike_detection_test(ts)
+
+    """
+    if ts.empty:
+        raise ValueError('No input data.')
+    mean_previous = ts.rolling(window=previous_number_of_points).mean()
+    difference = ts - mean_previous
+    output_ts = difference.abs() > threshold_value
     return output_ts
 
 
@@ -302,4 +457,38 @@ OD_IMPLEMENTED = {
             ('number_of_repeated_values', 'Repeated Values', int),
         ),
     },
+    'z_score_test': {
+        'fn': z_score_test,
+        'ts_col_type': 'y',
+        'args': (
+            ('number_of_standard_deviations', 'Standard Deviations', int),
+        ),
+    },
+    'modified_z_score_test': {
+        'fn': modified_z_score_test,
+        'ts_col_type': 'y',
+        'args': (
+            ('median_absolute_deviation', 'Median Absolute Deviation', float),
+        ),
+    },
+    'tukey_iqr_test': {
+        'fn': tukey_iqr_test,
+        'ts_col_type': 'y',
+        'args': (),
+    },
+    'spike_detection_test': {
+        'fn': spike_detection_test,
+        'ts_col_type': 'y',
+        'args': (
+            ('factor', 'Factor', float),
+        ),
+    },
+    'rate_of_change_test': {
+        'fn': rate_of_change_test,
+        'ts_col_type': 'y',
+        'args': (
+            ('threshold_value', 'Threshold Value', float),
+            ('previous_number_of_points', 'Previous Points', int),
+        ),
+    }
 }
