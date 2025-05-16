@@ -6,6 +6,17 @@ import os
 import shinyswatch
 
 #
+# File paths that enhance the tool's usability
+#
+
+# Directory of custom schema files
+SCHEMA_DIR = 'outlier_tool/schemas'
+
+# Paths of custom javascript/CSS files
+JS_UTIL = 'outlier_tool/js/util.js'
+CSS_MISC = 'outlier_tool/css/misc.css'
+
+#
 # Outlier detection column creation
 #
 
