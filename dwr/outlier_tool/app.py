@@ -266,11 +266,13 @@ def server(input: Inputs, output: Outputs, session: Session):
         results_df.set(file_obj.output_results_as_df())
 
 
+    # TODO: update this when flagging happens??
     @render.data_frame
     @reactive.calc
     def od_results_table():
         req(df := results_df())
         return df
+    # TODO: update this when flagging happens
     @render.data_frame
     @reactive.calc
     def od_results_table_viz():
@@ -280,6 +282,8 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     # Generate the data we will let the user download. To do so, we filter out
     # some columns and apply light transformations to outlier detection results.
+    #
+    # TODO: update this when flagging happens
     def get_export_df(df, options):
         # Filter out internal/unwanted columns
         ignore_cols = []

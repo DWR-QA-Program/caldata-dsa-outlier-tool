@@ -445,6 +445,7 @@ def rate_of_change_test(ts: pd.Series, threshold_value: float, previous_number_o
     return output_ts
 
 
+# TODO: make this an object
 OD_IMPLEMENTED = {
     'gross_range_test': {
         'fn': gross_range_test,
@@ -482,36 +483,45 @@ OD_IMPLEMENTED = {
     },
     'z_score_test': {
         'fn': z_score_test,
+        'plain': 'Z-score test',
         'ts_col_type': 'y',
         'args': (
-            ('number_of_standard_deviations', 'Standard Deviations', int),
+            ('number_of_standard_deviations', 'Standard Deviations', int, 3),
         ),
+        'col_widths': (6,),
     },
     'modified_z_score_test': {
         'fn': modified_z_score_test,
+        'plain': 'Modified z-score test',
+        'ts_col_type': 'y',
         'ts_col_type': 'y',
         'args': (
-            ('median_absolute_deviation', 'Median Absolute Deviation', float),
+            ('median_absolute_deviation', 'Median Absolute Deviation', float, None),
         ),
+        'col_widths': (6,),
     },
     'tukey_iqr_test': {
         'fn': tukey_iqr_test,
+        'plain': 'Tukey IQR test',
         'ts_col_type': 'y',
-        'args': (),
     },
     'spike_detection_test': {
         'fn': spike_detection_test,
+        'plain': 'Spike detection test',
         'ts_col_type': 'y',
         'args': (
-            ('factor', 'Factor', float),
+            ('factor', 'Factor', float, 1),
         ),
+        'col_widths': (6,),
     },
     'rate_of_change_test': {
         'fn': rate_of_change_test,
+        'plain': 'Rate of change test',
         'ts_col_type': 'y',
         'args': (
-            ('threshold_value', 'Threshold Value', float),
-            ('previous_number_of_points', 'Previous Points', int),
+            ('threshold_value', 'Threshold Value', float, None),
+            ('previous_number_of_points', 'Previous Points', int, None),
         ),
+        'col_widths': (6,6),
     }
 }

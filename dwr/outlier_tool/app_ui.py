@@ -342,6 +342,41 @@ app_ui = ui.page_sidebar(
                                         ui.p('The flat line test evaluates a column of data and marks repeated values as failing. The number of repetitions before failing can be configured. Failures apply to entire groups of repeated values, not just the first value that exceeds the repetition limit. Repeated missing values do not trigger failures.'),
                                     )
                                 ),
+                                ui.accordion_panel(
+                                    'Z-score test',
+                                    ui.div(
+                                        ui.p('This test measures how many standard deviations a data point is from the mean of a dataset. Values beyond a threshold (typically ±3) are considered outliers, making it simple but sensitive to extreme values.'
+                                        ),
+                                    )
+                                ),
+                                ui.accordion_panel(
+                                    'Modified z-score test',
+                                    ui.div(
+                                        ui.p('Similar to the z score test, but it uses the median and median absolute deviation (MAD) instead of the mean and standard deviation. This makes it more robust to extreme values and better suited for data that may not be normally distributed.'
+                                        ),
+                                    )
+                                ),
+                                ui.accordion_panel(
+                                    'Tukey IQR test',
+                                    ui.div(
+                                        ui.p('''This method looks at the middle 50% of the data (the interquartile range) and flags values that are far outside this range. It's a non-parametric test, meaning it doesn't assume any specific distribution, making it useful for skewed or irregular datasets.'''
+                                        ),
+                                    )
+                                ),
+                                ui.accordion_panel(
+                                    'Spike detection test',
+                                    ui.div(
+                                        ui.p('''This test identifies sudden, sharp changes in value—spikes—by comparing each point to its neighbors. It's typically used in time series or sequential data where a single, abrupt jump may indicate an anomaly.'''
+                                        ),
+                                    )
+                                ),
+                                ui.accordion_panel(
+                                    'Rate of change test',
+                                    ui.div(
+                                        ui.p('This test examines the difference between consecutive data points to identify values where the rate of change is unusually high compared to the typical change in the data. It helps find outliers that represent abrupt shifts or movements.'
+                                        ),
+                                    )
+                                ),
                                 open=False,
                             ),
                         ),
