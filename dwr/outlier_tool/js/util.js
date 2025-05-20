@@ -55,8 +55,10 @@ const shinyOutputUpdateManager = {
  * Observes a DOM element for a period of inactivity after mutations, then executes a callback.
  * @param {string} elementSelector - CSS selector for the element to observe.
  * @param {function} onSettledCallback - Function to call when DOM changes have settled.
- * @param {number} debounceDelayMs - Milliseconds of inactivity to wait for.
- * @param {number} maxObservationTimeMs - Max time to observe before giving up.
+ * @param {number} debounceDelayMs - Milliseconds of inactivity to wait for. Raising/lowering
+ *        this means the browser will check for stability less/more often, respectively.
+ * @param {number} maxObservationTimeMs - Max time to observe before giving up. This is used to
+ *        implement a fail-safe so the observations do not continue perpetually.
  */
 function observeUntilSettled(elementSelector,
                              onSettledCallback,

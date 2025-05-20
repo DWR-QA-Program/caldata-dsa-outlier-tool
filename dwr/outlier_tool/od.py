@@ -462,8 +462,8 @@ OD_IMPLEMENTED = {
         'plain': 'Time gap test',
         'ts_col_type': 'x',
         'args': (
-            ('number', 'Number', int, 1),
-            ('unit', 'Unit', 'date_unit', 'hours'),
+            ('number', 'Number', int, None),
+            ('unit', 'Unit', 'date_unit', None),
         ),
         'col_widths': (6,6),
     },
