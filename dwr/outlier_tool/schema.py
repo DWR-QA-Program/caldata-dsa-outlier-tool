@@ -4,17 +4,44 @@ import json
 from pathlib import Path
 from dataclasses import dataclass
 from typing import List, Optional
+
+import pandas as pd
+
 from .m import SCHEMA_DIR
+
+# We need a "sentinel" object to allow None as a valid optional argument
+_sentinel = object()
+
+# List possible data types specified in schema files
+_NUMERIC = ('int', 'float')
+_DATETIME = ('datetime',)
+
 
 @dataclass
 class Column:
     '''Represents a column from a data dictionary.'''
     name: str
     type: str
-    description: Optional[str] = None  # Optional field, defaults to None
-    units: Optional[str] = None        # Optional field, defaults to None
+    description: Optional[str] = None # Optional field, defaults to None
+    units: Optional[str] = None
+    min: Optional[int | float] = None
+    max: Optional[int | float] = None
+    _orig_name: str = None # stores original column name from file
+
+    def __post_init__(self):
+        self._orig_name = self.name
+
+    def reset_name(self):
+        self.name = self._orig_name
+
+    def is_numeric(self):
+        return self.type in _NUMERIC
+
+    def is_datetime(self):
+        return self.type in _DATETIME
 
 
+# TODO: json schema validation
 @dataclass
 class Schema:
     '''Class to hold information about a custom data schema.'''
@@ -22,11 +49,23 @@ class Schema:
     description: Optional[str]
     columns: List[Column]
 
+    # Support list-type indexing
+    def __getitem__(self, idx):
+        return self.columns[idx]
+
+    # Support dictionary-type get method
+    def get(self, k, default_value=_sentinel):
+        for col in self.columns:
+            if col.name == k:
+                return col
+        if default_value is not _sentinel:
+            return default_value
+        raise ValueError(str(k))
+
 
     @classmethod
     def from_dict(cls, data: dict) -> 'Schema':
         '''Creates a Schema object from a dictionary (parsed JSON).'''
-        # Handle nested Column objects
         columns = [Column(**col) for col in data['columns']] # Unpack dict into Column constructor
 
         return cls(
@@ -50,6 +89,10 @@ class Schema:
         except Exception as e:
             print(f'ERROR: {e}')
 
+    def reset_column_names(self):
+        for col in self.columns:
+            col.reset_name()
+
 
 def parse_schemas(loc=SCHEMA_DIR):
     try:
@@ -60,7 +103,7 @@ def parse_schemas(loc=SCHEMA_DIR):
             if (fpath := Path(os.path.join(rootname, filename))).suffix == '.json'
         ]
     except Exception as e:
-        print(e)
+        print(f'COULD NOT LOAD SCHEMAS: {e}')
         return []
 
 

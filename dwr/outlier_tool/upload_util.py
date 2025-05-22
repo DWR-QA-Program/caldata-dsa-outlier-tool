@@ -4,6 +4,7 @@ import dateparser
 
 import numpy as np
 import pandas as pd
+from htmltools import tags
 from pandas.api.types import is_numeric_dtype
 
 from shiny import ui
@@ -11,6 +12,7 @@ from shiny import ui
 from . import util
 from .util import to_html_list, jlog1, print_func_name
 from .m import DATETIMECOL
+from .schema import Schema
 
 
 def read_csv(fpath, options):
@@ -25,26 +27,43 @@ def read_csv(fpath, options):
             inplace=True,
         )
 
-    # Ensure column names are unique - this is needed for the explore tab since the
-    # render function only accepts unique column names.
-    df = deduplicate_columns(df)
-
     return df
 
 
-def get_date_cols(df):
+def get_empty_cols(df):
+    return [col for col in df.columns if df[col].isnull().all()]
+
+
+def get_date_cols(df, empty, schema: Schema=None):
     ret = []
-    for col in df.columns:
-        if 'date' in col.lower():
+    for i, col in enumerate(df.columns):
+        if col in empty:
+            continue
+
+        # Columns should be valid dates if any of the conditions are true:
+        if any((
+            'date' in col.lower(),
+            schema is not None and schema[i].is_datetime(),
+        )):
             ret.append(col)
             continue
+
         # TODO: call try_parse_date on other columns
 
     return ret
 
 
-def get_num_cols(df):
-    return [col for col in df.columns if is_numeric_dtype(df[col])]
+def get_num_cols(df, empty, schema: Schema=None):
+    return [col for i, col in enumerate(df.columns) if all([
+        # Check if pandas notices that the column is numeric
+        is_numeric_dtype(df[col]),
+
+        # Check if the column isn't completely empty
+        col not in empty,
+
+        # Check if the column isn't manually labeled as non-numeric
+        schema is None or schema[i].is_numeric()
+    ])]
 
 
 # TODO: maybe consider allowing user to pass format string
@@ -167,7 +186,7 @@ def attempt_composite_date(df, sample_size=10) -> tuple[str | None, str | None, 
     return None, None, None
 
 
-def upload_checkbox(description, tooltip_text):
+def checkbox_with_help(description, tooltip_text):
     return ui.TagList(
         ui.span(
             ui.HTML(f'&nbsp;{description}&nbsp;')
@@ -180,27 +199,43 @@ def upload_checkbox(description, tooltip_text):
 
 
 # Returns ui elements that show the error status of a file upload+parse
-def format_upload_error_msg(msg, exception):
+def format_upload_error_msg(fname, exception):
     return ui.panel_well(
-        util.danger(msg),
+        util.danger(f'ERROR: could not load {fname}:'),
         ui.p(repr(exception)),
     )
 
 
 # Returns ui elements that show the status of a file upload+parse
-def format_upload_msg(msg,
+def format_upload_msg(fname,
+                      total_cols: int,
+                      num_date_cols: int,
+                      num_numeric_cols: int,
                       hyphen_fixed=[],
                       hyphen_attempted=[],
-                      date_cols=[],
-                      num_cols=[],
                       composite_date_col=None,
     ):
-    elements = [
-        ui.p(ui.HTML(msg)), # use HTML tag to support passing raw html text
-    ]
+    elements = []
 
-    date_len = len(date_cols)
-    num_len = len(num_cols)
+    if num_date_cols == 0 or num_numeric_cols == 0:
+        elements.append(util.warning(ui.HTML(f'Loaded <code>{fname}</code>.')))
+    else:
+        elements.append(util.success(ui.HTML(f'Loaded <code>{fname}</code> successfully.',)))
+
+    other_cols = total_cols - num_date_cols - num_numeric_cols
+
+    # Column counts
+    elements.extend([
+        ui.p(f'Found {total_cols} column{"s" if total_cols > 1 else ""}:'),
+        tags.ul(
+            tags.li(f'{num_date_cols} date column{"s" if num_date_cols > 1 else ""}'),
+            tags.li(f'{num_numeric_cols} numeric column{"s" if num_numeric_cols > 1 else ""}'),
+            tags.li(f'{other_cols} other column{"s" if other_cols > 1 else ""}'),
+        ),
+    ])
+
+    if composite_date_col:
+        elements.append(util.info(f'"{composite_date_col}" was programmatically generated and added to the table.'))
 
     # Hyphen conversion info
     if hyphen_fixed:
@@ -215,31 +250,23 @@ def format_upload_msg(msg,
             ui.HTML(to_html_list(hyphen_attempted)),
         ])
 
-    # Date column info
-    if date_len:
-        elements.extend([
-            util.success(f'Found {date_len} date column{"s" if date_len > 1 else ""}:'),
-            ui.HTML(to_html_list(date_cols)),
-        ])
-        if composite_date_col:
-            elements.extend([
-                util.info(f'"{composite_date_col}" was programmatically generated.'),
-            ])
-    else:
-        elements.extend([
-            util.warning(f'WARNING: this file will not be plottable due to missing/unparseable date columns.'),
-        ])
+    # Add warning if there are missing columns
+    missing_col_types = None
+    if num_date_cols == 0 and num_numeric_cols == 0:
+        missing_col_types = 'date and numeric'
+    elif num_date_cols == 0:
+        missing_col_types = 'date'
+    elif num_numeric_cols == 0:
+        missing_col_types = 'numeric'
 
-    # Numeric column info
-    if num_len:
-        elements.extend([
-            util.success(f'Found {num_len} numeric column{"s" if num_len > 1 else ""}:'),
-            ui.HTML(to_html_list(num_cols)),
-        ])
-    else:
-        elements.extend([
-            util.warning(f'WARNING: this file will not be plottable due to missing numeric columns.'),
-        ])
+    if missing_col_types:
+        elements.append(util.warning(f'Tool will not be fully functional due to missing {missing_col_types} columns'))
+
+    elements.extend([
+        ui.br(),
+        ui.p('We will delete this file once you close or refresh the application window.'),
+    ])
+
     return ui.panel_well(elements)
 
 

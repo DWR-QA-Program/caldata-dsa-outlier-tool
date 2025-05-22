@@ -37,17 +37,27 @@ class File():
         # Match schema to file if possible
         if schema := find_matching_schema(self.df):
             self.schema = schema
-            # Rename columns if input file had no header
+
+            # Update df column names with schema's column names if file had no header
             if list(df.columns)[0] == 'col0':
+                # This is only ever needed when a user has uploaded a file more than once,
+                # while toggling the header checkbox.
+                self.schema.reset_column_names()
+
                 self.df.rename(
                     {src: trg.name for src, trg in zip(df.columns, schema.columns)},
                     axis='columns',
                     inplace=True,
                 )
+            # Update schema column names to match what the file header is
+            else:
+                for df_col, schema_col in zip(self.df.columns, self.schema.columns):
+                    schema_col.name = df_col
 
-        self.date_cols = upload_util.get_date_cols(self.df)
-        self.num_cols = upload_util.get_num_cols(self.df)
-        self.ph_cols = []
+
+        self.empty_cols = upload_util.get_empty_cols(self.df)
+        self.date_cols = upload_util.get_date_cols(self.df, self.empty_cols, self.schema)
+        self.num_cols = upload_util.get_num_cols(self.df, self.empty_cols, self.schema)
 
         # Coerce numeric/string columns to date columns
         for col in self.date_cols:
@@ -69,33 +79,32 @@ class File():
                     except ValueError:
                         pass
 
+        # Ensure column names are unique - this is needed for the 'check' tab since the
+        # render function only accepts unique column names.
+        df = upload_util.deduplicate_columns(df)
 
 
-    def save_od_result(self, test_name, x_col, y_col, result):
+    def save_od_result(self, test_name, test_col, result):
         results = self.od_results
         if test_name not in results:
             results[test_name] = {}
-        if x_col not in results[test_name]:
-            results[test_name][x_col] = {}
-
-        results[test_name][x_col][y_col] = result
+        results[test_name][test_col] = result
 
 
-    def get_result(self, test_name, x_col, y_col):
-        try:
-            return self.results[test_name][x_col][y_col]
-        except KeyError:
-            return None
+    def output_results_as_df(self):
+        col_key = 'Column'
+        test_key = 'Test name'
+        numf_key = 'Number of failures'
 
-    def format_results(self):
-        ret = ui.TagList()
+        data = {
+            col_key: [],
+            test_key: [],
+            numf_key: [],
+        }
+
         for test_name in self.od_results:
-            for x_col in self.od_results[test_name]:
-                for y_col in self.od_results[test_name][x_col]:
-                    result = self.od_results[test_name][x_col][y_col]
-                    if isinstance(result, int):
-                        ret.append(ui.p(f'{test_name}: {x_col}, {y_col}: {result} outliers'))
-                    else: # an error ocurred
-                        ret.append(ui.p(f'{test_name}: {x_col}, {y_col}: {result}'))
-        return ui.HTML(ret)
-
+            for test_col in self.od_results[test_name]:
+                data[col_key].append(test_col)
+                data[test_key].append(test_name)
+                data[numf_key].append(self.od_results[test_name][test_col])
+        return pd.DataFrame(data).sort_values([col_key, test_key])#.fillna('N/A')

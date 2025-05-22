@@ -1,13 +1,15 @@
-# Outlier detection functions
+# Outlier detection functions and functions related to using outlier detection tests.
 #
 # NOTE: The app calls outlier detection functions using the **kwargs construct.
 #       Due to this, changing the names of these functions arguments also requires
 #       changing values in the OD_IMPLEMENTED dictionary.
+from dataclasses import dataclass, field
+from typing import Callable, Optional, Any
 
 import numpy as np
 import pandas as pd
-
 from pandas.api.types import is_datetime64_any_dtype
+
 from scipy import stats
 from . import app_state
 from .m import PASS, MANUAL, _F
@@ -18,12 +20,10 @@ DATE_STRS = [ # maybe rename this
     'minutes',
 ]
 
+
 # Name a column that is the result of running outlier detection
-def get_od_name(test_name, x_col, y_col):
-    if y_col is None:
-        return f'{x_col}{_F}{test_name}' # whole time series under question
-    else:
-        return f'{x_col}_{y_col}{_F}{test_name}'
+def get_od_name(test_name, test_col):
+    return f'{test_col}{_F}{test_name}'
 
 
 def get_manual_col(y_col):
@@ -32,13 +32,12 @@ def get_manual_col(y_col):
 
 # Help identify all columns that are the result of running outlier detection on a column
 # or manual flagging.
-def get_od_names(df, x_col, y_col):
+def get_od_names(df, test_col):
     ret = [col
         for col in df.columns
         if any((
-            get_od_name('', x_col, y_col) in col,
-            get_od_name('', x_col, None) in col,
-            get_manual_col(y_col) in col,
+            get_od_name('', test_col) in col,
+            get_manual_col(test_col) in col,
         ))
     ]
 
@@ -55,14 +54,15 @@ def get_od_names(df, x_col, y_col):
 
 # Hacky way to get the names of all possible outlier detection columns in a dataframe
 def get_all_od_names(df: pd.DataFrame):
-    return get_od_names(df, '', '')
+    return get_od_names(df, '')
 
 
-# Help rename plotly elements so that they don't display our ugly internal column names.
-# Does nothing if outlier detection hasn't been executed yet.
+# Help rename plotly elements so that they don't display our ugly internal column names
+# on the legend. Does nothing if outlier detection hasn't been executed yet.
 #
 # Note that we use internal column names as *values inside a column* to control plot
-# markers (color & shape). That is what gets changed here.
+# markers (color & shape). That is what gets changed here, not the names of columns in
+# a table.
 def prettify_column_names(figure, od_cols) -> None:
     renames = {
         col: MANUAL if MANUAL in col else col[col.find(_F):].lstrip('_')
@@ -77,28 +77,13 @@ def prettify_column_names(figure, od_cols) -> None:
             ))
 
 
-# Tests than can be run on any table
-def get_default_tests():
-    return {
+# Returns list of default tests we can run on any dataset
+def get_default_tests(file: app_state.File):
+    raise NotImplementedError('needs to account for not using x column')
+    test_types = {
         'x': [time_gap_test_auto],
         'y': [value_gap_test],
     }
-
-
-def get_tests(file: app_state.File, config):
-    if config is not None:
-        ret = []
-        for test_fn, y_col, kwargs in config:
-            for x_col in file.date_cols:
-                if True:
-                    ret.append((
-                        test_fn,
-                        x_col,
-                        y_col,
-                        kwargs,
-                    ))
-        return ret
-    test_types = get_default_tests()
 
     ret = []
     for date_test in test_types['x']:
@@ -108,13 +93,43 @@ def get_tests(file: app_state.File, config):
     return ret
 
 
-def pH_range_test(ts) -> pd.Series:
-    return gross_range_test(ts, 0, 14)
+def get_tests(file: app_state.File):
+    df = file.df
+    schema = file.schema
+
+    # We don't know anything about this data, just return simple tests
+    if schema is None:
+        return get_default_tests(file)
+
+    ret = []
+    for col in schema:
+        # Don't test columns without data
+        if col.name in file.empty_cols:
+            continue
+
+        # Add tests that are specific to just a date column
+        # TODO: support non-auto values from schema
+        if col.is_datetime():
+            ret.append((time_gap_test_auto, col.name, {}))
+            continue
+
+        # Add numeric tests using user-provided schema
+        if col.is_numeric():
+            for date_col in file.date_cols:
+                # Value gap test can be done for all columns
+                ret.append((value_gap_test, col.name, {}))
+
+                # Run gross range test when data is present in input columns
+                if col.min is not None or col.max is not None:
+                    ret.append((gross_range_test, col.name, {'minimum': col.min, 'maximum': col.max}))
+
+    return ret
 
 
 def gross_range_test(ts, minimum, maximum) -> pd.Series:
     '''
-    Apply a gross range test to a time series.
+    Apply a gross range test to a time series. Values outside of the provided minimum
+    and/or maximum will be flagged as failing. Values matching the min/max will pass.
 
     Parameters
     ----------
@@ -143,9 +158,9 @@ def gross_range_test(ts, minimum, maximum) -> pd.Series:
     if minimum is not None and maximum is not None:
         if minimum > maximum:
             raise ValueError('Minimum value cannot exceed maximum value')
-        output_ts = (ts > maximum) | (ts <= minimum)
+        output_ts = (ts > maximum) | (ts < minimum)
     elif minimum is not None:
-        output_ts = ts <= minimum
+        output_ts = ts < minimum
     else:
         output_ts = ts > maximum
 
@@ -256,6 +271,8 @@ def flat_line_test(ts: pd.Series, number_of_repeated_values: int = 2) -> pd.Seri
     '''
     if ts.empty:
         raise ValueError('No input data.')
+    if number_of_repeated_values is None:
+        raise ValueError('number_of_repeated_values parameter must be specified.')
     if number_of_repeated_values <= 1:
         raise ValueError('number_of_repeated_values parameter must be > 1.')
 
@@ -428,67 +445,83 @@ def rate_of_change_test(ts: pd.Series, threshold_value: float, previous_number_o
     return output_ts
 
 
+# TODO: make this an object
 OD_IMPLEMENTED = {
     'gross_range_test': {
         'fn': gross_range_test,
+        'plain': 'Gross range test',
         'ts_col_type': 'y',
         'args': (
-            ('minimum', 'Min', float),
-            ('maximum', 'Max', float),
+            ('minimum', 'Min', float, None),
+            ('maximum', 'Max', float, None),
         ),
+        'col_widths': (6,6), # this affects input sizes in accordions
     },
     'time_gap_test': {
         'fn': time_gap_test,
+        'plain': 'Time gap test',
         'ts_col_type': 'x',
         'args': (
-            ('number', 'Number', int),
-            ('unit', 'Unit', 'date_unit'),
-        )
+            ('number', 'Number', int, None),
+            ('unit', 'Unit', 'date_unit', None),
+        ),
+        'col_widths': (6,6),
     },
     'value_gap_test': {
         'fn': value_gap_test,
-        'ts_col_type': 'y',
-        'args': (),
+        'plain': 'Value gap test',
+        'ts_col_type': 'xy',
     },
     'flat_line_test': {
         'fn': flat_line_test,
-        'ts_col_type': 'y',
+        'plain': 'Flat line test',
+        'ts_col_type': 'xy',
         'args': (
-            ('number_of_repeated_values', 'Repeated Values', int),
+            ('number_of_repeated_values', 'Repeated Values', int, 2),
         ),
+        'col_widths': (6,),
     },
     'z_score_test': {
         'fn': z_score_test,
+        'plain': 'Z-score test',
         'ts_col_type': 'y',
         'args': (
-            ('number_of_standard_deviations', 'Standard Deviations', int),
+            ('number_of_standard_deviations', 'Standard Deviations', int, 3),
         ),
+        'col_widths': (6,),
     },
     'modified_z_score_test': {
         'fn': modified_z_score_test,
+        'plain': 'Modified z-score test',
+        'ts_col_type': 'y',
         'ts_col_type': 'y',
         'args': (
-            ('median_absolute_deviation', 'Median Absolute Deviation', float),
+            ('median_absolute_deviation', 'Median Absolute Deviation', float, None),
         ),
+        'col_widths': (6,),
     },
     'tukey_iqr_test': {
         'fn': tukey_iqr_test,
+        'plain': 'Tukey IQR test',
         'ts_col_type': 'y',
-        'args': (),
     },
     'spike_detection_test': {
         'fn': spike_detection_test,
+        'plain': 'Spike detection test',
         'ts_col_type': 'y',
         'args': (
-            ('factor', 'Factor', float),
+            ('factor', 'Factor', float, 1),
         ),
+        'col_widths': (6,),
     },
     'rate_of_change_test': {
         'fn': rate_of_change_test,
+        'plain': 'Rate of change test',
         'ts_col_type': 'y',
         'args': (
-            ('threshold_value', 'Threshold Value', float),
-            ('previous_number_of_points', 'Previous Points', int),
+            ('threshold_value', 'Threshold Value', float, None),
+            ('previous_number_of_points', 'Previous Points', int, None),
         ),
+        'col_widths': (6,6),
     }
 }
