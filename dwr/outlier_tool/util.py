@@ -56,14 +56,14 @@ def catch_errors(func):
 
 
 def jlog(msg='', level=0):
-    if os.environ.get('LOGLEVEL') is None:
-        return
+    #if os.environ.get('LOGLEVEL') is None:
+    #    return
     print(f'JLO: {chr(9)*level}{msg}')
 
-    global LOG_MSG
-    LOG_MSG += 1
-    if LOG_MSG > 500:
-        raise RuntimeError('something has gone wrong')
+    #global LOG_MSG
+    #LOG_MSG += 1
+    #if LOG_MSG > 500:
+    #    raise RuntimeError('something has gone wrong')
 
 
 def jlog1(msg=''):
@@ -84,7 +84,7 @@ def req(variable, output_fn=print):
         cond = variable
 
     shiny.req(cond)
-    output_fn(f'req passed')
+    #output_fn(f'req passed')
 
 
 def success(msg):
