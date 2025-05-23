@@ -1,6 +1,9 @@
 {
     "name": "O&M",
     "description": "Data dictionary provided by Daniel Wisheropp from the O&M team",
+    "supported_extensions": [
+        "PRN"
+    ],
     "columns": [
         {
             "name": "SITE_NAME",

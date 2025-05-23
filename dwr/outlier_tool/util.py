@@ -123,5 +123,10 @@ def get_true_first_column_name(row: pd.Series) -> str:
     else:
         return PASS
 
+
+def get_suffix(filename):
+    return Path(filename).suffix
+
+
 def remove_suffix(filename):
     return Path(filename).stem

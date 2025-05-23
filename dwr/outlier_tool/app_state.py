@@ -35,7 +35,7 @@ class File():
 
 
         # Match schema to file if possible
-        if schema := find_matching_schema(self.df):
+        if schema := find_matching_schema(self.name, self.df):
             self.schema = schema
 
             # Update df column names with schema's column names if file had no header
