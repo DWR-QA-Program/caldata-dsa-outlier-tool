@@ -21,6 +21,7 @@ dateparser = "^1.2"
 openpyxl = "^3.1"
 seaborn = "^0.13.2"
 pytest = "^8.3.5"
+tsfresh = "^0.21.0"
 
 [tool.poetry.group.hostdev]
 optional = true
