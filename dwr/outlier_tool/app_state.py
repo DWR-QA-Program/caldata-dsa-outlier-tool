@@ -61,7 +61,14 @@ class File():
 
         # Coerce numeric/string columns to date columns
         for col in self.date_cols:
-            self.df[col] = self.df[col].apply(upload_util.try_parse_date)
+            # Inconsistent data can throw this operation off
+            try:
+                self.df[col] = self.df[col].apply(upload_util.try_parse_date)
+            except TypeError as e:
+                print(e)
+                # TODO: get this info back to the user
+            except Exception as e:
+                print(e)
 
         # Remove date label from any supposed date columns that were not successfully converted
         self.date_cols = [col for col in self.date_cols if pd.api.types.is_datetime64_any_dtype(self.df[col])]
