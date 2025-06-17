@@ -131,7 +131,7 @@ class ODTestSet:
                 ui.layout_columns(*inputs, col_widths=col_widths),
                 icon=ui.tags.span(
                     ui.HTML(trash_svg),
-                    class_="clickable-accordion-trash-icon",
+                    class_='clickable-accordion-trash-icon',
                     data_panel_value=value, # this becomes data-panel-value in the browser
                 ),
                 value=value,
@@ -139,6 +139,6 @@ class ODTestSet:
         return ui.accordion(*accordions, open=False)
 
     # Format tests into runnable list of tests
-    def get_test_list(self, input_obj: Inputs):
+    def get_test_list(self, input_obj: Inputs) -> list[tuple[Callable, str, dict]]:
         self.gather_user_arguments(input_obj)
         return [test.to_test_arguments() for test in self]

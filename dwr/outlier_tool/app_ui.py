@@ -9,6 +9,17 @@ from . import od
 from . import util
 from . import upload_util
 
+
+# Returns names (ids) of file selectors managed by the UI.
+def get_file_selector_names():
+    return [
+        'sel_files_check',
+        'sel_files_test',
+        'sel_files_viz',
+        'sel_files_export',
+    ]
+
+
 # Load our icons into memory so we can put them inline later. It would be more
 # natural to serve them as an image but shiny doesn't seem to support simple file
 # serving, and we don't really want to have to call a render.image function, so
@@ -21,6 +32,7 @@ def load_icon(path, default=''):
         print(repr(e))
         svg = default
     return svg
+
 box_svg = load_icon(m.DOTTED_BOX_ICON)
 trash_svg = load_icon(m.TRASH_ICON, default='X')
 
@@ -75,7 +87,7 @@ def _test_setup_left(info: dict[str, list|dict]):
                     'Test(s):',
                     ui.tooltip(
                         ui.span('\u2139', id='test_tooltip'),
-                        'See "Help" page for test descriptions',
+                        'Click "Test descriptions" for information on each test',
                     ),
                 ),
                 test_boxes
@@ -83,33 +95,75 @@ def _test_setup_left(info: dict[str, list|dict]):
         ),
     )
 
+
 def test_help_modal():
     return ui.modal(
-        ui.p('Set up and run tests on your data in these steps:'),
-        tags.ol(
-            tags.li('Select tests'),
-            tags.ul(
-                tags.li('Check boxes to select column/test combinations, then click ">" to add to a test plan.'),
-                tags.li('Incompatible column/test pairs will be ignored.'),
+        ui.accordion(
+            ui.accordion_panel(
+                'Gross range test',
+                ui.div(
+                    ui.p('The gross range test evaluates a column of numerical data against a minimum and/or maximum value. Values falling outside the minimum and maximum (not including the min/max themselves!) will be marked as failing.'),
+                )
             ),
-            tags.li('Configure arguments'),
-            tags.ul(
-                tags.li('Some tests require additional inputs. Expand the accordions to modify these.'),
+            ui.accordion_panel(
+                'Time gap test',
+                ui.div(
+                    ui.p('The time gap test evaluates a date column for gaps in its expected cadence. A cadence is a number of days, hours, or minutes.'),
+                )
             ),
-            tags.li('Run tests'),
-            tags.ul(
-                tags.li('Click "run tests" at the bottom of the page.'),
-                tags.li('Tests can be re-run with new arguments.'),
+            ui.accordion_panel(
+                'Value gap test',
+                ui.div(
+                    ui.p('The value gap test simply tests for missing data in a column. This test requires no additional user input.'),
+                )
             ),
-            tags.li('View results'),
-            tags.ul(
-                tags.li('Results appear below and on the next page.'),
+            ui.accordion_panel(
+                'Flat line test',
+                ui.div(
+                    ui.p('The flat line test evaluates a column of data and marks repeated values as failing. The number of repetitions before failing can be configured. Failures apply to entire groups of repeated values, not just the first value that exceeds the repetition limit. Repeated missing values do not trigger failures.'),
+                )
             ),
+            ui.accordion_panel(
+                'Z-score test',
+                ui.div(
+                    ui.p('This test measures how many standard deviations a data point is from the mean of a dataset. Values beyond a threshold (typically ±3) are considered outliers, making it simple but sensitive to extreme values.'
+                    ),
+                )
+            ),
+            ui.accordion_panel(
+                'Modified z-score test',
+                ui.div(
+                    ui.p('Similar to the z score test, but it uses the median and median absolute deviation (MAD) instead of the mean and standard deviation. This makes it more robust to extreme values and better suited for data that may not be normally distributed.'
+                    ),
+                )
+            ),
+            ui.accordion_panel(
+                'Tukey IQR test',
+                ui.div(
+                    ui.p('''This method looks at the middle 50% of the data (the interquartile range) and flags values that are far outside this range. It's a non-parametric test, meaning it doesn't assume any specific distribution, making it useful for skewed or irregular datasets.'''
+                    ),
+                )
+            ),
+            ui.accordion_panel(
+                'Spike detection test',
+                ui.div(
+                    ui.p('''This test identifies sudden, sharp changes in value—spikes—by comparing each point to its neighbors. It's typically used in time series or sequential data where a single, abrupt jump may indicate an anomaly.'''
+                    ),
+                )
+            ),
+            ui.accordion_panel(
+                'Rate of change test',
+                ui.div(
+                    ui.p('This test examines the difference between consecutive data points to identify values where the rate of change is unusually high compared to the typical change in the data. It helps find outliers that represent abrupt shifts or movements.'
+                    ),
+                )
+            ),
+            open=False,
         ),
-        title='Test setup help',
         easy_close=True,
         size='l'
     )
+
 
 app_ui = ui.page_sidebar(
             ui.sidebar(
@@ -174,7 +228,7 @@ app_ui = ui.page_sidebar(
                             tags.h4('Set up and run outlier tests', class_='tab-title'),
                         ),
                         ui.column(6, 
-                            ui.input_action_button('btn_test_help', 'Test setup help', class_='btn-info'),
+                            ui.input_action_button('btn_test_help', 'Test descriptions', class_='btn-info'),
                         style='display: flex; justify-content: right; align-items: center;'),
                     ),
                     ui.row(
@@ -311,77 +365,6 @@ app_ui = ui.page_sidebar(
                         ui.output_data_frame('export_table'),
                     ),
                 ),
-                ui.nav_spacer(),
-                ui.nav_panel('Help',
-                    tags.h4('Help', class_='tab-title'),
-                    ui.row(
-                        ui.column(6,
-                            ui.h5('Test descriptions'),
-                            ui.accordion(
-                                ui.accordion_panel(
-                                    'Gross range test',
-                                    ui.div(
-                                        ui.p('The gross range test evaluates a column of numerical data against a minimum and/or maximum value. Values falling outside the minimum and maximum (not including the min/max themselves!) will be marked as failing.'),
-                                    )
-                                ),
-                                ui.accordion_panel(
-                                    'Time gap test',
-                                    ui.div(
-                                        ui.p('The time gap test evaluates a date column for gaps in its expected cadence. A cadence is a number of days, hours, or minutes.'),
-                                    )
-                                ),
-                                ui.accordion_panel(
-                                    'Value gap test',
-                                    ui.div(
-                                        ui.p('The value gap test simply tests for missing data in a column. This test requires no additional user input.'),
-                                    )
-                                ),
-                                ui.accordion_panel(
-                                    'Flat line test',
-                                    ui.div(
-                                        ui.p('The flat line test evaluates a column of data and marks repeated values as failing. The number of repetitions before failing can be configured. Failures apply to entire groups of repeated values, not just the first value that exceeds the repetition limit. Repeated missing values do not trigger failures.'),
-                                    )
-                                ),
-                                ui.accordion_panel(
-                                    'Z-score test',
-                                    ui.div(
-                                        ui.p('This test measures how many standard deviations a data point is from the mean of a dataset. Values beyond a threshold (typically ±3) are considered outliers, making it simple but sensitive to extreme values.'
-                                        ),
-                                    )
-                                ),
-                                ui.accordion_panel(
-                                    'Modified z-score test',
-                                    ui.div(
-                                        ui.p('Similar to the z score test, but it uses the median and median absolute deviation (MAD) instead of the mean and standard deviation. This makes it more robust to extreme values and better suited for data that may not be normally distributed.'
-                                        ),
-                                    )
-                                ),
-                                ui.accordion_panel(
-                                    'Tukey IQR test',
-                                    ui.div(
-                                        ui.p('''This method looks at the middle 50% of the data (the interquartile range) and flags values that are far outside this range. It's a non-parametric test, meaning it doesn't assume any specific distribution, making it useful for skewed or irregular datasets.'''
-                                        ),
-                                    )
-                                ),
-                                ui.accordion_panel(
-                                    'Spike detection test',
-                                    ui.div(
-                                        ui.p('''This test identifies sudden, sharp changes in value—spikes—by comparing each point to its neighbors. It's typically used in time series or sequential data where a single, abrupt jump may indicate an anomaly.'''
-                                        ),
-                                    )
-                                ),
-                                ui.accordion_panel(
-                                    'Rate of change test',
-                                    ui.div(
-                                        ui.p('This test examines the difference between consecutive data points to identify values where the rate of change is unusually high compared to the typical change in the data. It helps find outliers that represent abrupt shifts or movements.'
-                                        ),
-                                    )
-                                ),
-                                open=False,
-                            ),
-                        ),
-                    ),
-                value='help_tab'),
             id='navigation_bar',
             ),
             ui.include_js(m.JS_UTIL),
