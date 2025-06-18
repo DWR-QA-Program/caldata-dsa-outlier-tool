@@ -91,13 +91,10 @@ def server(input: Inputs, output: Outputs, session: Session):
 
                     await asyncio.sleep(0) # allow event loop to switch tasks
 
-            refresh_od_results(file_obj)
+            refresh_od_results_manual(file_obj)
 
         except Exception as e:
             util.show_danger(f'Internal error: {e}', duration=5)
-
-
-    od_task = reactive.ExtendedTask(run_od)
 
 
     @reactive.effect
@@ -140,6 +137,10 @@ def server(input: Inputs, output: Outputs, session: Session):
         ui.update_select('sel_files_viz', choices=state.get_filenames())
         ui.update_select('sel_files_export', choices=state.get_filenames())
 
+        # Update selectors to the most recently uploaded file - we only need to update one
+        # and the rest will sync with it.
+        ui.update_select('sel_files_check', selected=fname)
+
         # If a user uploads a file more than one time, toggling the header button between
         # uploads, the resulting data may have different column names. If so, we need to
         # make sure to refresh a few tabs so that they don't display the previous column names.
@@ -165,20 +166,39 @@ def server(input: Inputs, output: Outputs, session: Session):
         jlog1(f'read_file exit')
 
 
+    # When the user selects a file, they generally expect to see the same selected file on
+    # all navigation tabs. We keep all file selectors in sync here to meet this expectation.
+    # While it would be more elegant to put a single file selector above or even within the
+    # navigation tabs, keeping 4 copies of the selector allows us some UI flexibility.
+    def sync_selector(sel_obj: str, other_sel_objs: list[str]):
+        @reactive.effect
+        def sync_fn():
+            selected_value = input[sel_obj]()
+            with reactive.isolate(): # prevent infinite reactive loop
+                for selector_name in other_sel_objs:
+                    ui.update_select(selector_name, selected=selected_value)
+        return sync_fn
+
+
     @render.ui
     def upload_text():
         return upload_msg()
 
 
-    def _update_x_and_y_cols(file_obj: app_state.File):
+    def _update_x_cols(file_obj: app_state.File):
         ui.update_select('sel_x',
             choices=file_obj.date_cols,
             selected=file_obj.last_selected_x_col
         )
+    def _update_y_cols(file_obj: app_state.File):
         ui.update_select('sel_y',
             choices=file_obj.num_cols,
             selected=file_obj.last_selected_y_col
         )
+
+    def _update_x_and_y_cols(file_obj: app_state.File):
+        _update_x_cols(file_obj)
+        _update_y_cols(file_obj)
 
 
     # There are 2 selectors for an x and y column on the review page - this function
@@ -223,7 +243,36 @@ def server(input: Inputs, output: Outputs, session: Session):
         req(selected_file := input.sel_files_test())
         file_obj = user_state().get_file(selected_file)
 
-        od_task.invoke(tests.get_test_list(input), file_obj)
+        test_list = tests.get_test_list(input)
+
+        # The user will, at some point, select x and y columns to plot on the graph. We save
+        # these selected columns for the user's convenience. However, before this choice has
+        # been made, a default column will be selected in the selector - it will always be the
+        # first column, reading a file's columns left to right. In our context, this first
+        # column is often a station or sensor number, which is essentially useless to
+        # visualize.
+        #
+        # To make things slightly easier for the user, we instead save the first column which
+        # a test was selected on, since they're probably interested in visualizing it. Of
+        # course, if the user has already selected a column that was tested, we do not
+        # overwrite that saved column.
+        test_cols = [test_col for _, test_col, _ in test_list]
+        if file_obj.last_selected_x_col not in test_cols:
+            for test_col in test_cols:
+                if test_col in file_obj.date_cols:
+                    file_obj.last_selected_x_col = test_col
+                    _update_x_cols(file_obj)
+                    break
+
+        if file_obj.last_selected_y_col not in test_cols:
+            for test_col in test_cols:
+                if test_col in file_obj.num_cols:
+                    file_obj.last_selected_y_col = test_col
+                    _update_y_cols(file_obj)
+                    break
+
+        # Finally, actually run the outlier detection
+        od_task.invoke(test_list, file_obj)
 
 
     @render.data_frame
@@ -253,7 +302,7 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     # This function updates our reactive dataframes so that when outlier detection
     # tests are finished running, the results dataframe and plot will update as well.
-    def refresh_od_results(file_obj):
+    def refresh_od_results_manual(file_obj):
         # FIXME: there is a race case here where the user selects a different file
         # while od tests are running, which will result in this function creating
         # results/plots that don't match the currently selected file. This would be
@@ -264,6 +313,17 @@ def server(input: Inputs, output: Outputs, session: Session):
         active_df.set(file_obj.df)
 
         results_df.set(file_obj.output_results_as_df())
+
+
+    # Set up od results table to update automatically when a new file is selected
+    @reactive.effect
+    def refresh_od_results_auto_test():
+        req(selected_file := input.sel_files_test())
+        return refresh_od_results_manual(user_state().get_file(selected_file))
+    @reactive.effect
+    def refresh_od_results_auto_viz():
+        req(selected_file := input.sel_files_viz())
+        return refresh_od_results_manual(user_state().get_file(selected_file))
 
 
     # TODO: update this when flagging happens??
@@ -801,10 +861,18 @@ def server(input: Inputs, output: Outputs, session: Session):
             yield chunk
             await asyncio.sleep(0) # allow event loop to switch tasks
 
-    #@render.image
-    #def logo():
-    #    img: ImgData = {'src': 'img/logo.png', 'width': '100%'}
-    #    return img
+
+    #
+    # Variables that rely on above functions:
+    #
+    od_task = reactive.ExtendedTask(run_od)
+
+    selectors = app_ui.get_file_selector_names()
+    fn_list = [ # list of anonymous functions with reactive effects
+        sync_selector(curr_selector, [s for s in selectors if s != curr_selector])
+        for curr_selector in selectors
+    ]
+
 
 
 app = App(app_ui.app_ui, server, debug=False)

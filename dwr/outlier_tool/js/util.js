@@ -236,31 +236,6 @@ document.addEventListener('click', function(event) {
     }
 });
 
-/*
- * Enable "help" tab to glow when it's mentioned in a tooltip. The tooltip is
- * created dynamically, so we have to observe for it.
- */
-const tooltip_observer = new MutationObserver((mutations, obs) => {
-    const tooltip = document.getElementById('test_tooltip');
-    if (tooltip) {
-        // Attach hover listeners
-        const targetLink = document.querySelector('a[data-value="help_tab"]');
-        if (targetLink) {
-            tooltip.addEventListener('mouseenter', () => {
-                targetLink.classList.add('glow');
-            });
-            tooltip.addEventListener('mouseleave', () => {
-                targetLink.classList.remove('glow');
-            });
-        }
-        // Note: we don't want to disconnect the observer since the tooltip
-        // is recreated each time the file changes on the test page, so we
-        // need to re-add the listeners.
-    }
-});
-
-tooltip_observer.observe(document.body, { childList: true, subtree: true });
-
 
 /*
  * TODO: finish this

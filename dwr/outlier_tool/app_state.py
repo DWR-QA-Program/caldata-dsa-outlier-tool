@@ -101,7 +101,7 @@ class File():
     def output_results_as_df(self):
         col_key = 'Column'
         test_key = 'Test name'
-        numf_key = 'Number of failures'
+        numf_key = 'Data points that failed'
 
         data = {
             col_key: [],
