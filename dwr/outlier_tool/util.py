@@ -16,8 +16,6 @@ from shiny import ui
 
 from .m import PASS
 
-LOG_MSG = 0
-
 COLORS = {
     None: '\033[0m',
     'red': '\033[31m',
@@ -56,14 +54,7 @@ def catch_errors(func):
 
 
 def jlog(msg='', level=0):
-    if os.environ.get('LOGLEVEL') is None:
-        return
     print(f'JLO: {chr(9)*level}{msg}')
-
-    global LOG_MSG
-    LOG_MSG += 1
-    if LOG_MSG > 500:
-        raise RuntimeError('something has gone wrong')
 
 
 def jlog1(msg=''):
@@ -84,7 +75,6 @@ def req(variable, output_fn=print):
         cond = variable
 
     shiny.req(cond)
-    output_fn(f'req passed')
 
 
 def success(msg):
@@ -122,6 +112,11 @@ def get_true_first_column_name(row: pd.Series) -> str:
         return row.idxmax()
     else:
         return PASS
+
+
+def get_suffix(filename):
+    return Path(filename).suffix
+
 
 def remove_suffix(filename):
     return Path(filename).stem

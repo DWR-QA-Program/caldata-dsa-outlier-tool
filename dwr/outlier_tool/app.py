@@ -213,7 +213,7 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     @reactive.effect
     @reactive.event(input.btn_od)
-    @print_func_name('cyan')
+    @print_func_name()
     def do_outlier_detection():
         tests = user_selected_tests()
         if len(tests) == 0:
@@ -407,7 +407,6 @@ def server(input: Inputs, output: Outputs, session: Session):
     # these are the points on the graph that have been selected. We use the customdata
     # parameter set up for us to map these values to the values in the original DataFrame.
     @util.catch_errors
-    @print_func_name
     def callback_data_selected(trace, points, selector, trace_num: int) -> None:
         nonlocal selected_points
 
@@ -425,13 +424,11 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     # Prevent manual flagging buttons from doing anything when data is deselected
     @util.catch_errors
-    @print_func_name
     def callback_clear_selection(trace, points) -> None:
         nonlocal selected_points
         selected_points = []
 
 
-    @print_func_name
     def set_flags(indices: list, cols: list[str], value: bool|list[bool]) -> None:
         '''
         Updates the manual flags of the active dataframe. The whole dataframe won't be
@@ -559,7 +556,6 @@ def server(input: Inputs, output: Outputs, session: Session):
         set_flags(sel, cols, curr)
 
 
-    @print_func_name
     def reset_flag_stacks():
         nonlocal redo_stack, undo_stack
         undo_stack = []
@@ -568,7 +564,6 @@ def server(input: Inputs, output: Outputs, session: Session):
         unemphasize_redo_button()
 
 
-    @print_func_name
     def reset_graph_selection():
         nonlocal selected_points
         selected_points = []
@@ -622,7 +617,6 @@ def server(input: Inputs, output: Outputs, session: Session):
     # for clearing out anything that was there before and repopulating the page with
     # content that will allow the user to set up tests.
     @reactive.effect
-    @print_func_name('green')
     def initialize_test_ui():
         req(selected_file := input.sel_files_test())
         file_obj = user_state().get_file(selected_file)
@@ -639,7 +633,6 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     @reactive.effect
     @reactive.event(input.btn_test_move)
-    @print_func_name('cyan')
     def set_up_tests():
         selected_x_cols = input.x_boxes()
         selected_y_cols = input.y_boxes()
@@ -771,7 +764,6 @@ def server(input: Inputs, output: Outputs, session: Session):
 
 
     @render.ui
-    @print_func_name
     def show_download_button():
         fname = get_export_file_name()
         jlog(fname)

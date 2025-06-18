@@ -3,11 +3,12 @@ import os
 import json
 from pathlib import Path
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Optional
 
 import pandas as pd
 
 from .m import SCHEMA_DIR
+from .util import get_suffix
 
 # We need a "sentinel" object to allow None as a valid optional argument
 _sentinel = object()
@@ -46,8 +47,9 @@ class Column:
 class Schema:
     '''Class to hold information about a custom data schema.'''
     name: str
-    description: Optional[str]
-    columns: List[Column]
+    columns: list[Column]
+    description: Optional[str] = ''
+    supported_extensions: Optional[list[str]] = None
 
     # Support list-type indexing
     def __getitem__(self, idx):
@@ -62,6 +64,10 @@ class Schema:
             return default_value
         raise ValueError(str(k))
 
+    # TODO: work with the grammar here - we don't want to imply that all extensions are supported if
+    #       the user doesn't specify a list of them.
+    def does_not_support_extension(self, extension):
+        return self.supported_extensions is not None and extension not in self.supported_extensions
 
     @classmethod
     def from_dict(cls, data: dict) -> 'Schema':
@@ -108,10 +114,20 @@ def parse_schemas(loc=SCHEMA_DIR):
 
 
 # TODO: make smarter
-def find_matching_schema(df):
+def find_matching_schema(file_name: str, df):
     cols = df.columns
+
+    try:
+        # This should always return a string but we catch errors for safety
+        suffix = get_suffix(file_name).lower()
+    except AttributeError:
+        suffix = None
+
     for schema in SCHEMAS:
-        if len(cols) != len(schema.columns):
+        if any([
+            schema.does_not_support_extension(suffix),
+            len(cols) != len(schema.columns)
+        ]):
             continue
         return schema
 
