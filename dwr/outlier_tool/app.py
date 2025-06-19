@@ -80,6 +80,7 @@ def server(input: Inputs, output: Outputs, session: Session):
 
                     new_col_name = od.get_od_name(test_name, test_col)
 
+                    start_time = time.perf_counter()
                     try:
                         df[new_col_name] = test_fn(df[test_col], **kwargs)
                     except Exception as e:
@@ -89,7 +90,16 @@ def server(input: Inputs, output: Outputs, session: Session):
 
                     file_obj.save_od_result(test_name, test_col, result)
 
-                    await asyncio.sleep(0) # allow event loop to switch tasks
+                    if (elapsed_time := time.perf_counter()-start_time) < .2:
+                        # Slow down text execution so that the progress bar is visible
+                        # even when tests execute quickly.
+                        sleep_duration = .2
+                    else:
+                        sleep_duration = 0
+
+                    # Free up the event loop to switch tasks so that the UI can respond
+                    # to events while tests are running.
+                    await asyncio.sleep(sleep_duration)
 
             refresh_od_results_manual(file_obj)
 
