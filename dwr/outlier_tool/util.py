@@ -91,8 +91,20 @@ def show_info(msg: TagChild, duration=3):
     ui.notification_show(msg, duration=duration, type='info')
 def show_warning(msg: TagChild, duration=3):
     ui.notification_show(msg, duration=duration, type='warning')
-def show_danger(msg: TagChild, duration=3):
-    ui.notification_show(msg, duration=duration, type='danger')
+def show_error(msg: TagChild, duration=3):
+    ui.notification_show(msg, duration=duration, type='error')
+
+
+def cond_progress(progress_bar, value, msg, detail=None):
+    if progress_bar is None:
+        return
+    progress_bar.set(value, message=msg, detail=detail)
+
+
+def cond_progress_close(progress_bar):
+    if progress_bar is None:
+        return
+    progress_bar.close()
 
 
 def to_html_list(items):
@@ -120,3 +132,7 @@ def get_suffix(filename):
 
 def remove_suffix(filename):
     return Path(filename).stem
+
+
+def get_file_size(filename):
+    return Path(filename).stat().st_size

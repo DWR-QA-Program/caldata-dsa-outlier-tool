@@ -59,7 +59,7 @@ class File():
         self.date_cols = upload_util.get_date_cols(self.df, self.empty_cols, self.schema)
         self.num_cols = upload_util.get_num_cols(self.df, self.empty_cols, self.schema)
 
-        # Coerce numeric/string columns to date columns
+        # Coerce numeric/string columns to date columns (this is a slow operation)
         for col in self.date_cols:
             # Inconsistent data can throw this operation off
             try:

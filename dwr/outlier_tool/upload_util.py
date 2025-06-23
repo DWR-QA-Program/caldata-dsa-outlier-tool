@@ -66,7 +66,6 @@ def get_num_cols(df, empty, schema: Schema=None):
     ])]
 
 
-# TODO: maybe consider allowing user to pass format string
 def try_parse_date(value, strict=False):
     # Attempt #1
     try:

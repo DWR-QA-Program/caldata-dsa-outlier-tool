@@ -27,7 +27,7 @@ from . import app_ui
 from . import util
 from . import app_state
 from . import upload_util
-from .util import print_func_name, jlog, jlog1, jlog2
+from .util import print_func_name, jlog, jlog1, jlog2, get_file_size
 
 
 def req(variable):
@@ -104,7 +104,7 @@ def server(input: Inputs, output: Outputs, session: Session):
             refresh_od_results_manual(file_obj)
 
         except Exception as e:
-            util.show_danger(f'Internal error: {e}', duration=5)
+            util.show_error(f'Internal error: {e}', duration=5)
 
 
     @reactive.effect
@@ -115,25 +115,43 @@ def server(input: Inputs, output: Outputs, session: Session):
 
         fpath = file[0]['datapath'] # file path internal to browser, only used here
         fname = file[0]['name'] # file name used as unique key, used in many functions
+        fsize = get_file_size(fpath)
+        fsize_mb = round(fsize / 1_000_000, 1)
+
+        if fsize > m.MAX_FILE_SIZE_BYTES:
+            util.show_error(
+                f'File size ({fsize_mb} MB) exceeds maximum of {m.MAX_FILE_SIZE_MB} MB',
+                duration=None,
+            )
+            return
+        elif fsize > m.WARN_FILE_SIZE_BYTES:
+            util.show_warning(f'File sizes greater than {m.WARN_FILE_SIZE_MB} MB may cause performance issues.')
+            progress = ui.Progress(0, 3) # this needs to be closed before the function completes
+        else:
+            progress = None
 
         with reactive.isolate():
             selected_upload_options = input.upload_settings()
 
         # Load file
         try:
+            util.cond_progress(progress, 0, 'Reading file into python')
             df = upload_util.read_csv(fpath, selected_upload_options)
         except Exception as e:
             upload_msg.set(upload_util.format_upload_error_msg(fname, exception=e))
+            util.cond_progress.close()
             return
 
         msg_kw = {}
 
         # Preprocess data if needed
+        util.cond_progress(progress, 1, 'Running pre-processing')
         if 'upload_nullify_hyphens' in selected_upload_options:
             # operates inplace on df
             msg_kw['hyphen_fixed'], msg_kw['hyphen_attempted'] = upload_util.nullify_hyphens(df)
 
         # Register file with internal systems
+        util.cond_progress(progress, 2, 'Setting up tool internals')
         state = user_state()
         file_obj = state.add_file(fname, df)
         msg_kw['total_cols'] = len(file_obj.df.columns)
@@ -142,6 +160,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         msg_kw['composite_date_col'] = file_obj.composite_date_col
 
         # Make file available on all relevant tabs
+        util.cond_progress(progress, 3, 'Refreshing tool state')
         ui.update_select('sel_files_check', choices=state.get_filenames())
         ui.update_select('sel_files_test', choices=state.get_filenames())
         ui.update_select('sel_files_viz', choices=state.get_filenames())
@@ -172,6 +191,7 @@ def server(input: Inputs, output: Outputs, session: Session):
             **msg_kw
         ))
 
+        util.cond_progress_close(progress)
         jlog1(f'read_file exit')
 
 
@@ -768,7 +788,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         try:
             tests.remove_by_hash(int(hash_value))
         except Exception as e:
-            util.show_danger(f'Internal error: {e}')
+            util.show_error(f'Internal error: {e}')
             return
 
         if len(tests) == 0:
