@@ -80,6 +80,7 @@ def server(input: Inputs, output: Outputs, session: Session):
 
                     new_col_name = od.get_od_name(test_name, test_col)
 
+                    start_time = time.perf_counter()
                     try:
                         df[new_col_name] = test_fn(df[test_col], **kwargs)
                     except Exception as e:
@@ -89,7 +90,16 @@ def server(input: Inputs, output: Outputs, session: Session):
 
                     file_obj.save_od_result(test_name, test_col, result)
 
-                    await asyncio.sleep(0) # allow event loop to switch tasks
+                    if (elapsed_time := time.perf_counter()-start_time) < .2:
+                        # Slow down text execution so that the progress bar is visible
+                        # even when tests execute quickly.
+                        sleep_duration = .2
+                    else:
+                        sleep_duration = 0
+
+                    # Free up the event loop to switch tasks so that the UI can respond
+                    # to events while tests are running.
+                    await asyncio.sleep(sleep_duration)
 
             refresh_od_results_manual(file_obj)
 
@@ -145,10 +155,9 @@ def server(input: Inputs, output: Outputs, session: Session):
         # uploads, the resulting data may have different column names. If so, we need to
         # make sure to refresh a few tabs so that they don't display the previous column names.
         with reactive.isolate():
-            # Refresh "check_table" by reselecting the selected value
+            # Refresh "check_table"
             if (selected_file := input.sel_files_check()) == fname:
-                ui.update_select('sel_files_check', selected='')
-                ui.update_select('sel_files_check', selected=fname)
+                invalidate_file_selector('sel_files_check')
 
             # Refresh test ui in test tab
             if (selected_file := input.sel_files_test()) == fname:
@@ -559,6 +568,8 @@ def server(input: Inputs, output: Outputs, session: Session):
 
         set_flags(selected_points, target_cols, value)
 
+        invalidate_file_selector('sel_files_export')
+
 
     @reactive.effect
     @reactive.event(input.btn_flag)
@@ -809,9 +820,17 @@ def server(input: Inputs, output: Outputs, session: Session):
         await session.send_custom_message('remove_export_header', {})
 
 
+    # This is used to force execution of reactive events that depend on the input file
+    # selector.
+    def invalidate_file_selector(sel_id):
+        with reactive.isolate():
+            req(selected_file := input[sel_id]())
+        ui.update_select(sel_id, selected='')
+        ui.update_select(sel_id, selected=selected_file)
+
+
     def get_export_file_name():
-        selected_file = input.sel_files_export()
-        req(selected_file)
+        req(selected_file := input.sel_files_export())
         selected_ext = input.sel_export_format()
         custom_fname = input.text_export_custom_fname()
 
