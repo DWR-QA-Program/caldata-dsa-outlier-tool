@@ -14,11 +14,21 @@
 .shiny-file-input-progress {
     overflow: visible;
     border-radius: 10px;
-    height: 80%;
+    height: 20%;
 }
 .shiny-file-input-progress .progress-bar {
     border-radius: 6px;
-    height: 80%;
+    height: 100%;
+}
+
+/* This div doesn't respect the padding of its parent container */
+#upload_options {
+    margin-left: 16px;
+}
+
+/* overwrite bootstrap's default margin of 16px, it's too much */
+#upload_options .form-group {
+    margin-bottom: 0px;
 }
 
 /* Add a little space between titles and their surrounding content */
@@ -30,6 +40,16 @@
 /* The upload box takes up too much horizontal space - manually limit it */
 #upload_well > .shiny-input-container {
     max-width: 20em;
+}
+
+/* Indent input objects so they look like they're part of the checkbox above */
+#show_rows_to_skip .form-group {
+    margin-left: 1.4em;
+}
+
+/* The number of rows should generally be a single digit, no need for this to be large */
+#input_skip_n_rows {
+    max-width: 4em;
 }
 
 /* Make trash icon color match text around it by default*/

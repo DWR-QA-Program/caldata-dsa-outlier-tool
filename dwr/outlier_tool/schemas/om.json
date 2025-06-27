@@ -1,9 +1,7 @@
 {
     "name": "O&M",
     "description": "Data dictionary provided by Daniel Wisheropp from the O&M team",
-    "supported_extensions": [
-        "PRN"
-    ],
+    "file_format_description": "This is a comma-separated .PRN or .csv file without any header row. 14 columns are expected, though data columns can be null if a station doesn't collect a given dimension.",
     "columns": [
         {
             "name": "SITE_NAME",

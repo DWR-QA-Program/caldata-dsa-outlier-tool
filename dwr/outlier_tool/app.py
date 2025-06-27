@@ -20,13 +20,7 @@ import shinyswatch
 import plotly.express as px
 import plotly.graph_objs as go
 
-from . import m
-from . import od
-from . import od_ui
-from . import app_ui
-from . import util
-from . import app_state
-from . import upload_util
+from . import m, od, od_ui, app_ui, util, app_state, upload_util, schema
 from .util import print_func_name, jlog, jlog1, jlog2
 
 
@@ -104,7 +98,7 @@ def server(input: Inputs, output: Outputs, session: Session):
             refresh_od_results_manual(file_obj)
 
         except Exception as e:
-            util.show_danger(f'Internal error: {e}', duration=5)
+            util.show_error(f'Internal error: {e}', duration=5)
 
 
     @reactive.effect
@@ -115,33 +109,54 @@ def server(input: Inputs, output: Outputs, session: Session):
 
         fpath = file[0]['datapath'] # file path internal to browser, only used here
         fname = file[0]['name'] # file name used as unique key, used in many functions
+        fsize = util.get_file_size(fpath)
+        fsize_mb = round(fsize / 1_000_000, 1)
 
+        if fsize > m.MAX_FILE_SIZE_BYTES:
+            util.show_error(
+                f'File size ({fsize_mb} MB) exceeds maximum of {m.MAX_FILE_SIZE_MB} MB',
+                duration=None,
+            )
+            return
+        elif fsize > m.WARN_FILE_SIZE_BYTES:
+            util.show_warning(f'File sizes greater than {m.WARN_FILE_SIZE_MB} MB may cause performance issues.')
+            progress = ui.Progress(0, 3) # this needs to be closed before the function completes
+        else:
+            progress = None
+
+        # Read all upload settings
         with reactive.isolate():
-            selected_upload_options = input.upload_settings()
+            read_kwargs = {}
+            selected_ff = input.sel_file_format()
+
+            if not input.checkbox_data_has_header():
+                read_kwargs['header'] = None
+
+            if input.checkbox_skip_n_rows():
+                read_kwargs['skiprows'] = input.input_skip_n_rows()
 
         # Load file
         try:
-            df = upload_util.read_csv(fpath, selected_upload_options)
+            util.cond_progress(progress, 0, 'Reading file into python')
+            df = upload_util.read_file(fpath, selected_ff, read_kwargs)
         except Exception as e:
             upload_msg.set(upload_util.format_upload_error_msg(fname, exception=e))
+            util.cond_progress_close(progress)
             return
 
         msg_kw = {}
 
-        # Preprocess data if needed
-        if 'upload_nullify_hyphens' in selected_upload_options:
-            # operates inplace on df
-            msg_kw['hyphen_fixed'], msg_kw['hyphen_attempted'] = upload_util.nullify_hyphens(df)
-
         # Register file with internal systems
+        util.cond_progress(progress, 1, 'Setting up tool internals')
         state = user_state()
-        file_obj = state.add_file(fname, df)
+        file_obj = state.add_file(fname, df, selected_ff)
         msg_kw['total_cols'] = len(file_obj.df.columns)
         msg_kw['num_date_cols'] = len(file_obj.date_cols)
         msg_kw['num_numeric_cols'] = len(file_obj.num_cols)
         msg_kw['composite_date_col'] = file_obj.composite_date_col
 
         # Make file available on all relevant tabs
+        util.cond_progress(progress, 2, 'Refreshing tool state')
         ui.update_select('sel_files_check', choices=state.get_filenames())
         ui.update_select('sel_files_test', choices=state.get_filenames())
         ui.update_select('sel_files_viz', choices=state.get_filenames())
@@ -155,10 +170,6 @@ def server(input: Inputs, output: Outputs, session: Session):
         # uploads, the resulting data may have different column names. If so, we need to
         # make sure to refresh a few tabs so that they don't display the previous column names.
         with reactive.isolate():
-            # Refresh "check_table"
-            if (selected_file := input.sel_files_check()) == fname:
-                invalidate_file_selector('sel_files_check')
-
             # Refresh test ui in test tab
             if (selected_file := input.sel_files_test()) == fname:
                 _initialize_test_ui(file_obj)
@@ -172,6 +183,7 @@ def server(input: Inputs, output: Outputs, session: Session):
             **msg_kw
         ))
 
+        util.cond_progress_close(progress)
         jlog1(f'read_file exit')
 
 
@@ -190,8 +202,30 @@ def server(input: Inputs, output: Outputs, session: Session):
 
 
     @render.ui
+    def file_format_info():
+        return schema.get_file_format_info(input.sel_file_format())
+        description, extended_description = schema.get_file_format_info(input.sel_file_format())
+        return (ui.p(description), ui.p(extended_description))
+
+
+    @render.ui
     def upload_text():
         return upload_msg()
+
+
+    @render.ui
+    def show_rows_to_skip():
+        req(input.checkbox_skip_n_rows())
+        return ui.input_numeric('input_skip_n_rows', 'Number of rows:', 0, min=0)
+
+
+    # Show upload options when no file format is selected
+    @render.ui
+    def upload_options():
+        req(ff := input.sel_file_format())
+        if ff != m.NO_FF:
+            return None
+        return app_ui.show_upload_options()
 
 
     def _update_x_cols(file_obj: app_state.File):
@@ -768,7 +802,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         try:
             tests.remove_by_hash(int(hash_value))
         except Exception as e:
-            util.show_danger(f'Internal error: {e}')
+            util.show_error(f'Internal error: {e}')
             return
 
         if len(tests) == 0:
@@ -822,9 +856,10 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     # This is used to force execution of reactive events that depend on the input file
     # selector.
-    def invalidate_file_selector(sel_id):
-        with reactive.isolate():
-            req(selected_file := input[sel_id]())
+    def invalidate_file_selector(sel_id, selected_file=None):
+        if selected_file is None:
+            with reactive.isolate():
+                req(selected_file := input[sel_id]())
         ui.update_select(sel_id, selected='')
         ui.update_select(sel_id, selected=selected_file)
 

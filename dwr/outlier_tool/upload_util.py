@@ -15,17 +15,34 @@ from .m import DATETIMECOL
 from .schema import Schema
 
 
-def read_csv(fpath, options):
-    header = 'infer' if 'data_has_header' in options else None
+# This supports other delimiters
+def read_csv_basic(fpath, kwargs):
+    df = pd.read_csv(fpath, **kwargs)
 
-    df = pd.read_csv(fpath, header=header)
-
-    if header is None:
+    if 'header' in kwargs and kwargs['header'] is None:
         df.rename(
             {col: f'col{i}' for i, col in enumerate(df.columns)},
             axis='columns',
             inplace=True,
         )
+    return df
+
+
+def read_toa(fpath):
+    return pd.read_csv(fpath, skiprows=[0, 2, 3], na_values='NAN')
+
+
+def read_om(fpath):
+    return read_csv_basic(fpath, {'header': None})
+
+
+def read_file(fpath, selected_ff, kwargs):
+    if selected_ff == 'O&M':
+        df = read_om(fpath)
+    elif selected_ff == 'TOA5':
+        df = read_toa(fpath)
+    else:
+        df = read_csv_basic(fpath, kwargs)
 
     return df
 
@@ -43,7 +60,8 @@ def get_date_cols(df, empty, schema: Schema=None):
         # Columns should be valid dates if any of the conditions are true:
         if any((
             'date' in col.lower(),
-            schema is not None and schema[i].is_datetime(),
+            'time' in col.lower(),
+            schema is not None and len(schema.columns) > 0 and schema[i].is_datetime(),
         )):
             ret.append(col)
             continue
@@ -62,12 +80,14 @@ def get_num_cols(df, empty, schema: Schema=None):
         col not in empty,
 
         # Check if the column isn't manually labeled as non-numeric
-        schema is None or schema[i].is_numeric()
+        schema is None or len(schema.columns) == 0 or schema[i].is_numeric()
     ])]
 
 
-# TODO: maybe consider allowing user to pass format string
 def try_parse_date(value, strict=False):
+    if pd.isna(value):
+        return None
+
     # Attempt #1
     try:
         parsed = dateutil.parser.parse(value)
@@ -186,16 +206,21 @@ def attempt_composite_date(df, sample_size=10) -> tuple[str | None, str | None, 
     return None, None, None
 
 
-def checkbox_with_help(description, tooltip_text):
+def text_with_help(description, tooltip_text, leading_text=''):
     return ui.TagList(
         ui.span(
-            ui.HTML(f'&nbsp;{description}&nbsp;')
+            ui.HTML(f'{leading_text}{description}&nbsp;')
         ),
         ui.tooltip(
             ui.span('\u2139'),
             tooltip_text
         ),
     )
+
+
+def checkbox_with_help(description, tooltip_text, leading_text=''):
+    # This adds a space between the checkbox and the text
+    return text_with_help(description, tooltip_text, leading_text='&nbsp;')
 
 
 # Returns ui elements that show the error status of a file upload+parse
@@ -211,8 +236,6 @@ def format_upload_msg(fname,
                       total_cols: int,
                       num_date_cols: int,
                       num_numeric_cols: int,
-                      hyphen_fixed=[],
-                      hyphen_attempted=[],
                       composite_date_col=None,
     ):
     elements = []
@@ -236,19 +259,6 @@ def format_upload_msg(fname,
 
     if composite_date_col:
         elements.append(util.info(f'"{composite_date_col}" was programmatically generated and added to the table.'))
-
-    # Hyphen conversion info
-    if hyphen_fixed:
-        elements.extend([
-            util.info(f'INFO: successfully converted to numeric type after deleting hyphens:'),
-            ui.HTML(to_html_list(hyphen_fixed)),
-        ])
-
-    if hyphen_attempted:
-        elements.extend([
-            util.warning(f'WARNING: deleting hyphens worked but there are still non-numeric values present:'),
-            ui.HTML(to_html_list(hyphen_attempted)),
-        ])
 
     # Add warning if there are missing columns
     missing_col_types = None
