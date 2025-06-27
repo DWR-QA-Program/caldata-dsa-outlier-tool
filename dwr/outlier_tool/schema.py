@@ -47,9 +47,9 @@ class Column:
 class Schema:
     '''Class to hold information about a custom data schema.'''
     name: str
-    columns: list[Column]
+    columns: Optional[list[Column]]
     description: Optional[str] = ''
-    supported_extensions: Optional[list[str]] = None
+    file_format_description: Optional[str] = 'This file format has no description.'
 
     # Support list-type indexing
     def __getitem__(self, idx):
@@ -64,19 +64,15 @@ class Schema:
             return default_value
         raise ValueError(str(k))
 
-    # TODO: work with the grammar here - we don't want to imply that all extensions are supported if
-    #       the user doesn't specify a list of them.
-    def does_not_support_extension(self, extension):
-        return self.supported_extensions is not None and extension not in self.supported_extensions
-
     @classmethod
     def from_dict(cls, data: dict) -> 'Schema':
         '''Creates a Schema object from a dictionary (parsed JSON).'''
-        columns = [Column(**col) for col in data['columns']] # Unpack dict into Column constructor
+        columns = [Column(**col) for col in data.get('columns', {})] # Unpack dict into Column constructor
 
         return cls(
             name=data['name'],
             description=data.get('description', ''),
+            file_format_description=data.get('file_format_description', ''),
             columns=columns
         )
 
@@ -84,16 +80,9 @@ class Schema:
     @classmethod
     def from_file(cls, file_path: str | os.PathLike) -> 'Schema':
         '''Loads and parses a JSON file into a Schema instance.'''
-        try:
-            with open(file_path, 'r') as f:
-                data = json.load(f)
-            return cls.from_dict(data)
-        except FileNotFoundError:
-            print(f'ERROR: File not found: {file_path}')
-        except json.JSONDecodeError:
-            print(f'ERROR: Could not decode JSON from {file_path}')
-        except Exception as e:
-            print(f'ERROR: {e}')
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+        return cls.from_dict(data)
 
     def reset_column_names(self):
         for col in self.columns:
@@ -109,26 +98,31 @@ def parse_schemas(loc=SCHEMA_DIR):
             if (fpath := Path(os.path.join(rootname, filename))).suffix == '.json'
         ]
     except Exception as e:
-        print(f'COULD NOT LOAD SCHEMAS: {e}')
+        print(f'COULD NOT LOAD SCHEMAS: {repr(e)}')
         return []
 
 
-# TODO: make smarter
-def find_matching_schema(file_name: str, df):
-    cols = df.columns
+def get_schema(name):
+    for s in SCHEMAS:
+        if s.name == name:
+            return s
+    return None
 
-    try:
-        # This should always return a string but we catch errors for safety
-        suffix = get_suffix(file_name).lower()
-    except AttributeError:
-        suffix = None
 
-    for schema in SCHEMAS:
-        if any([
-            schema.does_not_support_extension(suffix),
-            len(cols) != len(schema.columns)
-        ]):
-            continue
-        return schema
+def get_all_schema_names():
+    return [s.name for s in SCHEMAS]
+
+
+def get_file_format_info(name: str):
+    if schema := get_schema(name):
+        return schema.file_format_description
+    else:
+        return '''Currently, no file format is selected. Please ensure your uploaded file
+            contains either one header row followed by your data, or just your data rows
+            without a header. If you choose not to include a header, we'll create generic
+            column names for you to use.
+        '''
+
+
 
 SCHEMAS = parse_schemas()

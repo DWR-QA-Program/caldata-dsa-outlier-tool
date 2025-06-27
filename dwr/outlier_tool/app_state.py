@@ -4,15 +4,15 @@ from shiny import ui
 from . import m
 from . import util
 from . import upload_util
-from .schema import find_matching_schema
+from .schema import get_schema
 
 # Tracks the state of a user's session
 class State():
     def __init__(self):
         self.files = {}
 
-    def add_file(self, fname, df):
-        self.files[fname] = File(fname, df)
+    def add_file(self, fname: str, df: pd.DataFrame, ff: str):
+        self.files[fname] = File(fname, df, ff)
         return self.get_file(fname)
 
     def get_file(self, fname):
@@ -24,7 +24,7 @@ class State():
 
 # Stores data needed for using an uploaded file
 class File():
-    def __init__(self, name, df):
+    def __init__(self, name, df, selected_ff):
         self.name = name
         self.df = df
         self.schema = None
@@ -35,24 +35,25 @@ class File():
 
 
         # Match schema to file if possible
-        if schema := find_matching_schema(self.name, self.df):
+        if schema := get_schema(selected_ff):
             self.schema = schema
 
-            # Update df column names with schema's column names if file had no header
-            if list(df.columns)[0] == 'col0':
-                # This is only ever needed when a user has uploaded a file more than once,
-                # while toggling the header checkbox.
-                self.schema.reset_column_names()
+            if self.schema.columns:
+                # Update df column names with schema's column names if file had no header
+                if list(df.columns)[0] == 'col0':
+                    # This is only ever needed when a user has uploaded a file more than once,
+                    # while toggling the header checkbox.
+                    self.schema.reset_column_names()
 
-                self.df.rename(
-                    {src: trg.name for src, trg in zip(df.columns, schema.columns)},
-                    axis='columns',
-                    inplace=True,
-                )
-            # Update schema column names to match what the file header is
-            else:
-                for df_col, schema_col in zip(self.df.columns, self.schema.columns):
-                    schema_col.name = df_col
+                    self.df.rename(
+                        {src: trg.name for src, trg in zip(df.columns, schema.columns)},
+                        axis='columns',
+                        inplace=True,
+                    )
+                # Update schema column names to match what the file header is
+                else:
+                    for df_col, schema_col in zip(self.df.columns, self.schema.columns):
+                        schema_col.name = df_col
 
 
         self.empty_cols = upload_util.get_empty_cols(self.df)

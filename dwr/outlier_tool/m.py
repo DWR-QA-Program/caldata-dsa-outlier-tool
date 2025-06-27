@@ -73,3 +73,6 @@ MAX_FILE_SIZE_MB = int(MAX_FILE_SIZE_BYTES / 1_000_000)
 # Threshold the tool can use to warn the user about performance issues
 WARN_FILE_SIZE_BYTES = 5_000_000
 WARN_FILE_SIZE_MB = int(WARN_FILE_SIZE_BYTES / 1_000_000)
+
+# Default option of file format selector
+NO_FF = 'None'

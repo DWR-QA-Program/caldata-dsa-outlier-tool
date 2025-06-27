@@ -7,6 +7,7 @@ import shinyswatch
 from . import m
 from . import od
 from . import util
+from . import schema
 from . import upload_util
 
 
@@ -165,6 +166,27 @@ def test_help_modal():
     )
 
 
+def show_upload_options():
+    return ui.div(
+        ui.input_checkbox(
+            'checkbox_data_has_header',
+            upload_util.checkbox_with_help(
+                'Count first row as header',
+                'Uncheck if uploaded file has no header at the top row.'
+            ),
+            value=True,
+        ),
+        ui.input_checkbox(
+            'checkbox_skip_n_rows',
+            upload_util.checkbox_with_help(
+                'Ignore rows',
+                'The number of rows specified will be ignored.'
+            )
+        ),
+        ui.output_ui('show_rows_to_skip'),
+    id='upload_options')
+
+
 app_ui = ui.page_sidebar(
             ui.sidebar(
                 #ui.output_image('logo'),
@@ -179,26 +201,26 @@ app_ui = ui.page_sidebar(
                     ui.row(
                         ui.column(4,
                             ui.panel_well(
-                                ui.input_file('file1', 'Import a file:', accept=['.csv', '.prn'], multiple=False),
-                                ui.input_checkbox_group(
-                                    'upload_settings',
-                                    'Actions on this file:',
-                                    {
-                                        'data_has_header': upload_util.checkbox_with_help(
-                                            'Count first row as header',
-                                            'Uncheck if uploaded file has no header at the top row.'
-                                        ),
-                                        'upload_nullify_hyphens': upload_util.checkbox_with_help(
-                                            'Treat hyphens as nulls',
-                                            'Update any values consisting of only hyphens (-) to contain no value. Then, attempt to convert any affected columns to a numeric type.'
-                                        ),
-                                    },
-                                    selected=[
-                                        'data_has_header',
-                                        'upload_nullify_hyphens',
-                                    ]
+                                ui.row(
+                                    ui.input_select('sel_file_format', 'Optional file format (see description \u2192):', [m.NO_FF] + schema.get_all_schema_names()),
+                                ),
+                                ui.row(
+                                    ui.input_file('file1', 'Import a file:', multiple=False),
+                                ),
+                                ui.row(
+                                    ui.output_ui('upload_options'),
                                 ),
                             id='upload_well'),
+                        ),
+                        ui.column(4,
+                            ui.panel_well(
+                                tags.h5('File formats'),
+                                ui.p('''If your data is in a format that we don't natively support,
+                                        choosing a file format can let us know how to parse your data.
+                                '''),
+                                ui.hr(),
+                                ui.output_ui('file_format_info'),
+                            style='height: 100%;'),
                         ),
                         ui.column(4,
                             ui.panel_well(
@@ -209,7 +231,7 @@ app_ui = ui.page_sidebar(
                                 ),
                             ),
                         ),
-                    ),
+                    style='display: flex; align-items: stretch;'),
                     ui.br(),
                     ui.row(
                         ui.column(8,
@@ -224,10 +246,10 @@ app_ui = ui.page_sidebar(
                 ),
                 ui.nav_panel('3. Test Data',
                     ui.row(
-                        ui.column(6, 
+                        ui.column(6,
                             tags.h4('Set up and run outlier tests', class_='tab-title'),
                         ),
-                        ui.column(6, 
+                        ui.column(6,
                             ui.input_action_button('btn_test_help', 'Test descriptions', class_='btn-info'),
                         style='display: flex; justify-content: right; align-items: center;'),
                     ),
@@ -241,16 +263,6 @@ app_ui = ui.page_sidebar(
                         ui.column(1),
                         ui.column(6,
                             ui.span('Selected tests (some may need additional input):'),
-                            #ui.input_radio_buttons(
-                            #    'selected_tests_radio',
-                            #    'Order by:',
-                            #    {
-                            #        'test_name': 'Test name',
-                            #        'x_col': 'Date column',
-                            #        'y_col': 'Numeric column',
-                            #    },
-                            #    inline=True
-                            #),
                         ),
                     ),
                     ui.row(
@@ -348,7 +360,7 @@ app_ui = ui.page_sidebar(
                             ),
                             ui.input_select('sel_export_format', 'File format:', ['.csv', '.xlsx']),
                         ),
-                        ui.column(4, 
+                        ui.column(4,
                             ui.input_text('text_export_custom_fname', 'Custom file name (optional):', ''),
                             ui.div(
                                 tags.label('Download:', for_='download_data', class_='control-label'),
