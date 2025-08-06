@@ -14,7 +14,7 @@ from pandas.api.types import is_numeric_dtype
 import shiny
 from shiny import ui
 
-from .m import PASS
+from .m import PASS, MULTIPLE_FAILURES
 
 COLORS = {
     None: '\033[0m',
@@ -112,18 +112,37 @@ def to_html_list(items):
     return f'<ul>{list_items}</ul>'
 
 
-# When a row has True values for multiple outlier tests, which test should be displayed
-# on the "screen" graph? This function aims to solve this issue by finding the first
-# column with a True value, left to right. This gives consistency to the graph.
+# This function is used to control data point labeling on the outlier detection
+# result graph. Each failing data point should be labeled with its failing test name.
 #
-# This function is called row-wise on a list of outlier detection columns, producing
-# one string value (a column name) for each given row. The output can be used to
-# construct a column used for labels in the "screen" graph.
-def get_true_first_column_name(row: pd.Series) -> str:
-    if row.sum() > 0:
+# Specificially, this function is called row-wise on all outlier detection columns
+# and returns one string value for each given row/data point. This output string
+# will be the data point's label.
+#
+# But, when a row has failed multiple outlier tests, which test should be
+# displayed on our graph? This function provides 2 options to solve this issue:
+# 1. When "take_first" argument is True and a data point has multiple failures:
+#      Return the first failing test name, reading the dataframe left-to right.
+#      This is arbitrary but does provide some consistent information to the user.
+# 2. When "take_first" argument is False and a data point has multiple failures:
+#      When multiple tests have failed, return a generic string to indicate multiple
+#      points of failure.
+def get_row_label(row: pd.Series, take_first=False) -> str:
+    if (n_failures := row.sum()) == 0:
+        return PASS
+
+    if take_first or n_failures == 1:
         return row.idxmax()
     else:
-        return PASS
+        return MULTIPLE_FAILURES
+
+
+# Returns list of all failing tests for a given data point.
+def get_all_failures(row: pd.Series, renames={}) -> str:
+    failures = row[row].index
+    if failures.empty:
+        return 'None'
+    return ', '.join(f if f not in renames else renames[f].replace('Failed ', '') for f in failures)
 
 
 def get_suffix(filename):

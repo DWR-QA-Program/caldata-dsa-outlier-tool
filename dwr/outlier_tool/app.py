@@ -451,16 +451,24 @@ def server(input: Inputs, output: Outputs, session: Session):
         jlog1(f'plot {x_col}/{y_col}')
         jlog1(f'{df[x_col].dtype}')
 
-        # Set up the shape and color of markings, when relevant. We want each
-        # outlier detection test to get a different shape+color combination.
         px_kwargs = {}
+        renames = {}
+
         if od_cols := od.get_od_names(df, y_col):
+            # Set arguments to let plotly know what column to use for markings
             px_kwargs['color'] = px_kwargs['symbol'] = categ_name = m.OUTLIER_TYPE
 
-            df[categ_name] = df[od_cols].apply(util.get_true_first_column_name, axis=1)
+            # Create the column for controlling markings
+            df[categ_name] = df[od_cols].apply(util.get_row_label, axis=1)
             px_kwargs['category_orders'] = {
                 categ_name: [m.PASS] + od_cols # keep 'pass' first
             }
+
+            # Create column to show (on hover) what tests failed for a data point
+            renames = od.get_od_col_renames(od_cols)
+            df[m.FAILURES] = df[od_cols].apply(util.get_all_failures, axis=1, renames=renames)
+            px_kwargs['hover_data'] = [m.FAILURES]
+
         jlog1(f'od_cols: {od_cols}')
 
         # This will allow us to correlate selected data points with "df"
@@ -488,8 +496,8 @@ def server(input: Inputs, output: Outputs, session: Session):
             fig._config = {}
         fig._config['displayModeBar'] = True
 
-        # Rename outlier detection columns so they display nicely in the plot.
-        od.prettify_column_names(fig, od_cols)
+        # Rename outlier detection columns so they display nicely in the legend.
+        od.apply_renames(fig, renames)
 
         # Set up callbacks for when data is selected
         for i, trace in enumerate(fig.data):
