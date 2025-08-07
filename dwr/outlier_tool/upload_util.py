@@ -12,11 +12,11 @@ from shiny import ui
 from . import util
 from .util import to_html_list, jlog1, print_func_name
 from .m import DATETIMECOL
-from .schema import Schema
+from .schema import Schema, get_schema
 
 
-# This supports other delimiters
-def read_csv_basic(fpath, kwargs):
+# This could support other delimiters
+def read_csv(fpath, kwargs):
     df = pd.read_csv(fpath, **kwargs)
 
     if 'header' in kwargs and kwargs['header'] is None:
@@ -28,23 +28,12 @@ def read_csv_basic(fpath, kwargs):
     return df
 
 
-def read_toa(fpath):
-    return pd.read_csv(fpath, skiprows=[0, 2, 3], na_values='NAN')
-
-
-def read_om(fpath):
-    return read_csv_basic(fpath, {'header': None})
-
-
 def read_file(fpath, selected_ff, kwargs):
-    if selected_ff == 'O&M':
-        df = read_om(fpath)
-    elif selected_ff == 'TOA5':
-        df = read_toa(fpath)
-    else:
-        df = read_csv_basic(fpath, kwargs)
+    if schema := get_schema(selected_ff):
+        # Override settings from the UI, they only pertain when no file format is selected
+        kwargs = schema.pandas_read_csv_arguments
 
-    return df
+    return read_csv(fpath, kwargs)
 
 
 def get_empty_cols(df):

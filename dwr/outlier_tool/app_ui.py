@@ -217,6 +217,8 @@ app_ui = ui.page_sidebar(
                                 tags.h5('File formats'),
                                 ui.p('''If your data is in a format that we don't natively support,
                                         choosing a file format can let us know how to parse your data.
+                                        Make sure your uploaded file matches the selected format to
+                                        prevent issues.
                                 '''),
                                 ui.hr(),
                                 ui.output_ui('file_format_info'),

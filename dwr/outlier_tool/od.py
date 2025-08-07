@@ -12,7 +12,7 @@ from pandas.api.types import is_datetime64_any_dtype
 
 from scipy import stats
 from . import app_state
-from .m import PASS, MANUAL, _F
+from .m import PASS, MANUAL, _F, MULTIPLE_FAILURES
 
 DATE_STRS = [ # maybe rename this
     'days',
@@ -57,19 +57,31 @@ def get_all_od_names(df: pd.DataFrame):
     return get_od_names(df, '')
 
 
-# Help rename plotly elements so that they don't display our ugly internal column names
-# on the legend. Does nothing if outlier detection hasn't been executed yet.
-#
-# Note that we use internal column names as *values inside a column* to control plot
-# markers (color & shape). That is what gets changed here, not the names of columns in
-# a table.
-def prettify_column_names(figure, od_cols) -> None:
-    renames = {
-        col: MANUAL if MANUAL in col else col[col.find(_F):].lstrip('_')
-        for col in od_cols
-    }
+# Helps rename plotly elements so that they don't display our ugly internal column
+# names on the legend or tooltip. Does nothing if outlier detection hasn't been
+# executed yet.
+def get_od_col_renames(od_cols) -> dict[str, str]:
+    if not od_cols:
+        return {}
+
+    renames = {}
+    for col in od_cols:
+        if MANUAL in col: # manual flag
+            renames[col] = MANUAL
+        else:
+            value = col[col.find(_F):].lstrip('_') # remove internal text
+            value = value.replace('_', ' ').capitalize() # make name look better
+            renames[col] = value
+
+    # Internal names need to be in the rename mapping to prevent errors but we
+    # don't want them to change.
+    renames[PASS] = PASS
+    renames[MULTIPLE_FAILURES] = MULTIPLE_FAILURES
+    return renames
+
+
+def apply_renames(figure, renames) -> None:
     if renames:
-        renames[PASS] = PASS
         figure.for_each_trace(lambda x: x.update(
                 name = renames[x.name],
                 legendgroup = renames[x.name],

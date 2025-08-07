@@ -31,7 +31,13 @@ _F = '_failed_'
 #
 
 # Value (see graph legend) used to denote data that has not "failed" any outlier detection
-PASS = 'pass'
+PASS = 'Pass'
+
+# Value (see graph legend) used to denote data that has "failed" multiple outlier detection tests
+MULTIPLE_FAILURES = 'Failed multiple tests'
+
+# Column name used by the app to denote a row's failed tests. Appears in tooltip.
+FAILURES = 'Failed tests'
 
 # Column name used by the app to denote a row's index
 IDX = 'idx'
@@ -43,6 +49,7 @@ OUTLIER_TYPE = 'Outlier Status'
 INTERNAL_COLS = [
     OUTLIER_TYPE,
     IDX,
+    FAILURES,
 ]
 
 

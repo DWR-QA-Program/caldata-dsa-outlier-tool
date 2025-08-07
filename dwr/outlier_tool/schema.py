@@ -2,7 +2,7 @@
 import os
 import json
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 import pandas as pd
@@ -50,6 +50,7 @@ class Schema:
     columns: Optional[list[Column]]
     description: Optional[str] = ''
     file_format_description: Optional[str] = 'This file format has no description.'
+    pandas_read_csv_arguments: Optional[dict] = field(default_factory=dict)
 
     # Support list-type indexing
     def __getitem__(self, idx):
@@ -73,6 +74,7 @@ class Schema:
             name=data['name'],
             description=data.get('description', ''),
             file_format_description=data.get('file_format_description', ''),
+            pandas_read_csv_arguments=data.get('pandas_read_csv_arguments', {}),
             columns=columns
         )
 
