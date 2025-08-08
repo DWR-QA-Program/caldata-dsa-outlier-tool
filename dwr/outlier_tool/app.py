@@ -441,12 +441,10 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         df[m.IDX] = df.index
 
         # Add unit to y-axis label
-        if all(
-            (
-                schema is not None,
-                (col_obj := schema.get(y_col, None)) is not None,
-                col_obj.units is not None,
-            )
+        if (
+            schema is not None
+            and (col_obj := schema.get(y_col, None)) is not None
+            and col_obj.units is not None
         ):
             px_kwargs['labels'] = {y_col: f'{y_col} ({col_obj.units})'}
 
