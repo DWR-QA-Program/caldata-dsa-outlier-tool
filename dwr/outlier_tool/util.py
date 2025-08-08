@@ -1,20 +1,15 @@
 # misc functions
-import os
 import html
-import dateutil
-import dateparser
-from pathlib import Path
 from functools import wraps
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from htmltools import TagChild
-from pandas.api.types import is_numeric_dtype
-
 import shiny
+from htmltools import TagChild
 from shiny import ui
 
-from .m import PASS, MULTIPLE_FAILURES
+from .m import MULTIPLE_FAILURES, PASS
 
 COLORS = {
     None: '\033[0m',
@@ -138,7 +133,10 @@ def get_row_label(row: pd.Series, take_first=False) -> str:
 
 
 # Returns list of all failing tests for a given data point.
-def get_all_failures(row: pd.Series, renames={}) -> str:
+def get_all_failures(row: pd.Series, renames=None) -> str:
+    if renames is None:
+        renames = {}
+
     failures = row[row].index
     if failures.empty:
         return 'None'

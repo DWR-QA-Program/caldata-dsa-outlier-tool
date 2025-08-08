@@ -1,14 +1,9 @@
+import shinyswatch
 from htmltools import tags
 from shiny import ui
-
 from shinywidgets import output_widget
-import shinyswatch
 
-from . import m
-from . import od
-from . import util
-from . import schema
-from . import upload_util
+from . import m, schema, upload_util, util
 
 
 # Returns names (ids) of file selectors managed by the UI.
@@ -39,7 +34,9 @@ trash_svg = load_icon(m.TRASH_ICON, default='X')
 
 
 def _test_setup_left(info: dict[str, list|dict]):
-    if not info or not info['y_columns']:                                                                      return ui.panel_well(                                                                                      util.warning('No columns are available to test. You may need to upload a file with more numeric columns.'))
+    if not info or not info['y_columns']:
+        return ui.panel_well(
+            util.warning('No columns are available to test. You may need to upload a file with more numeric columns.'))
 
     # Set up element 1: checkbox list of date columns
     x_columns = info['x_columns']
@@ -202,7 +199,7 @@ app_ui = ui.page_sidebar(
                         ui.column(4,
                             ui.panel_well(
                                 ui.row(
-                                    ui.input_select('sel_file_format', 'Optional file format (see description \u2192):', [m.NO_FF] + schema.get_all_schema_names()),
+                                    ui.input_select('sel_file_format', 'Optional file format (see description \u2192):', [m.NO_FF, *schema.get_all_schema_names()]),
                                 ),
                                 ui.row(
                                     ui.input_file('file1', 'Import a file:', multiple=False),

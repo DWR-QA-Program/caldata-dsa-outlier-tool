@@ -1,18 +1,16 @@
 # misc functions related to uploading files to the tool
-import dateutil
 import dateparser
-
+import dateutil
 import numpy as np
 import pandas as pd
 from htmltools import tags
 from pandas.api.types import is_numeric_dtype
-
 from shiny import ui
 
 from . import util
-from .util import to_html_list, jlog1, print_func_name
 from .m import DATETIMECOL
 from .schema import Schema, get_schema
+from .util import jlog1, print_func_name
 
 
 # This could support other delimiters
@@ -79,8 +77,7 @@ def try_parse_date(value, strict=False):
 
     # Attempt #1
     try:
-        parsed = dateutil.parser.parse(value)
-        return parsed
+        return dateutil.parser.parse(value)
     except dateutil.parser._parser.ParserError:
         pass
 
@@ -114,19 +111,23 @@ def to_date(year: pd.Series, day_of_year: pd.Series, hour_and_minutes: pd.Series
 
 
 def get_year_cols(df, thresh):
-    mask = ((df >= 1900) & (df <= 2100)).sum() >= thresh
+    year_lower_bound = 1900
+    year_upper_bound = 2100
+    mask = ((df >= year_lower_bound) & (df <= year_upper_bound)).sum() >= thresh
     mask &= df.apply(pd.api.types.is_integer_dtype)
     return df.columns[mask].to_list()
 
 
 def get_day_of_year_cols(df, thresh):
-    mask = ((df >= 0) & (df <= 366)).sum() >= thresh
+    last_day_of_year = 366
+    mask = ((df >= 0) & (df <= last_day_of_year)).sum() >= thresh
     mask &= df.apply(pd.api.types.is_integer_dtype)
     return df.columns[mask].to_list()
 
 
 def get_hour_cols(df, thresh):
-    mask = ((df >= 0) & (df <= 2300)).sum() >= thresh
+    last_hour_of_day = 2300
+    mask = ((df >= 0) & (df <= last_hour_of_day)).sum() >= thresh
     mask &= df.apply(pd.api.types.is_integer_dtype)
     return df.columns[mask].to_list()
 
@@ -138,7 +139,7 @@ def attempt_composite_date(df, sample_size=10) -> tuple[str | None, str | None, 
     valid datetime column out of 3 columns. These columns must be in succession and
     consist of >= 90% values that respectively match a year, day of the month, and
     hour of the day.
-    
+
     This function operates "inplace" on the input DataFrame.
 
     Parameters
@@ -181,7 +182,7 @@ def attempt_composite_date(df, sample_size=10) -> tuple[str | None, str | None, 
             if (dcol_num := col_name_to_idx[potential_day_col]) != ycol_num+1:
                 continue
             for potential_hour_col in cols_matching_hour:
-                if (hcol_num := col_name_to_idx[potential_hour_col]) != dcol_num+1:
+                if col_name_to_idx[potential_hour_col] != dcol_num+1:
                     continue
                 matches.append((potential_year_col, potential_day_col, potential_hour_col))
                 jlog1(f'MATCH: {matches[-1]}')
@@ -273,7 +274,7 @@ def nullify_hyphens(df) -> tuple[list[str], list[str]]:
     '''
     Cleans the input DataFrame by removing values that consist of only hyphen
     characters. Attempts to convert affected columns to a numeric type
-    
+
     This function operates "inplace" on the input DataFrame.
 
     Parameters

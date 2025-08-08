@@ -1,14 +1,10 @@
 # Schemas are custom objects loaded from files that help the app load data more reliably.
-import os
 import json
-from pathlib import Path
+import os
 from dataclasses import dataclass, field
-from typing import Optional
-
-import pandas as pd
+from pathlib import Path
 
 from .m import SCHEMA_DIR
-from .util import get_suffix
 
 # We need a "sentinel" object to allow None as a valid optional argument
 _sentinel = object()
@@ -23,10 +19,10 @@ class Column:
     '''Represents a column from a data dictionary.'''
     name: str
     type: str
-    description: Optional[str] = None # Optional field, defaults to None
-    units: Optional[str] = None
-    min: Optional[int | float] = None
-    max: Optional[int | float] = None
+    description: str | None = None # Optional field, defaults to None
+    units: str | None = None
+    min: int | float | None = None
+    max: int | float | None = None
     _orig_name: str = None # stores original column name from file
 
     def __post_init__(self):
@@ -47,10 +43,10 @@ class Column:
 class Schema:
     '''Class to hold information about a custom data schema.'''
     name: str
-    columns: Optional[list[Column]]
-    description: Optional[str] = ''
-    file_format_description: Optional[str] = 'This file format has no description.'
-    pandas_read_csv_arguments: Optional[dict] = field(default_factory=dict)
+    columns: list[Column] | None
+    description: str | None = ''
+    file_format_description: str | None = 'This file format has no description.'
+    pandas_read_csv_arguments: dict | None = field(default_factory=dict)
 
     # Support list-type indexing
     def __getitem__(self, idx):
@@ -82,7 +78,7 @@ class Schema:
     @classmethod
     def from_file(cls, file_path: str | os.PathLike) -> 'Schema':
         '''Loads and parses a JSON file into a Schema instance.'''
-        with open(file_path, 'r') as f:
+        with open(file_path) as f:
             data = json.load(f)
         return cls.from_dict(data)
 
@@ -100,7 +96,7 @@ def parse_schemas(loc=SCHEMA_DIR):
             if (fpath := Path(os.path.join(rootname, filename))).suffix == '.json'
         ]
     except Exception as e:
-        print(f'COULD NOT LOAD SCHEMAS: {repr(e)}')
+        print(f'COULD NOT LOAD SCHEMAS: {e!r}')
         return []
 
 

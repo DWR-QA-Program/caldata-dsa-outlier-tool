@@ -3,16 +3,14 @@
 # NOTE: The app calls outlier detection functions using the **kwargs construct.
 #       Due to this, changing the names of these functions arguments also requires
 #       changing values in the OD_IMPLEMENTED dictionary.
-from dataclasses import dataclass, field
-from typing import Callable, Optional, Any
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import is_datetime64_any_dtype
-
 from scipy import stats
+
 from . import app_state
-from .m import PASS, MANUAL, _F, MULTIPLE_FAILURES
+from .m import _F, MANUAL, MULTIPLE_FAILURES, PASS
 
 DATE_STRS = [ # maybe rename this
     'days',
@@ -33,23 +31,13 @@ def get_manual_col(y_col):
 # Help identify all columns that are the result of running outlier detection on a column
 # or manual flagging.
 def get_od_names(df, test_col):
-    ret = [col
+    return [col
         for col in df.columns
         if any((
             get_od_name('', test_col) in col,
             get_manual_col(test_col) in col,
         ))
     ]
-
-    # Keep this here for posterity - if we want manual flags to appear on the graph
-    # before other flag types, this code can be uncommented.
-    #try:
-    #    idx = ret.index(MANUAL)
-    #    ret.insert(0, ret.pop(idx))
-    #except ValueError: # not found in list
-    #    pass
-
-    return ret
 
 
 # Hacky way to get the names of all possible outlier detection columns in a dataframe
@@ -99,42 +87,9 @@ def get_default_tests(file: app_state.File):
 
     ret = []
     for date_test in test_types['x']:
-        ret.extend(((date_test, x_col, None, {}) for x_col in file.date_cols))
+        ret.extend((date_test, x_col, None, {}) for x_col in file.date_cols)
     for value_test in test_types['y']:
-        ret.extend(((value_test, x_col, y_col, {}) for x_col in file.date_cols for y_col in file.num_cols))
-    return ret
-
-
-def get_tests(file: app_state.File):
-    df = file.df
-    schema = file.schema
-
-    # We don't know anything about this data, just return simple tests
-    if schema is None:
-        return get_default_tests(file)
-
-    ret = []
-    for col in schema:
-        # Don't test columns without data
-        if col.name in file.empty_cols:
-            continue
-
-        # Add tests that are specific to just a date column
-        # TODO: support non-auto values from schema
-        if col.is_datetime():
-            ret.append((time_gap_test_auto, col.name, {}))
-            continue
-
-        # Add numeric tests using user-provided schema
-        if col.is_numeric():
-            for date_col in file.date_cols:
-                # Value gap test can be done for all columns
-                ret.append((value_gap_test, col.name, {}))
-
-                # Run gross range test when data is present in input columns
-                if col.min is not None or col.max is not None:
-                    ret.append((gross_range_test, col.name, {'minimum': col.min, 'maximum': col.max}))
-
+        ret.extend((value_test, x_col, y_col, {}) for x_col in file.date_cols for y_col in file.num_cols)
     return ret
 
 
@@ -254,9 +209,7 @@ def value_gap_test(ts: pd.Series) -> pd.Series:
     if ts.empty:
         raise ValueError('No input data.')
 
-    output_ts = ts.isna()
-
-    return output_ts
+    return ts.isna()
 
 
 def flat_line_test(ts: pd.Series, number_of_repeated_values: int = 2) -> pd.Series:
@@ -298,12 +251,11 @@ def flat_line_test(ts: pd.Series, number_of_repeated_values: int = 2) -> pd.Seri
     group_sizes = ts.groupby(group_ids).transform('size')
 
     # Our output will be the groups with a size larger than the tolerable value
-    output_ts = group_sizes >= number_of_repeated_values
+    return group_sizes >= number_of_repeated_values
 
-    return output_ts
 
 def z_score_test(ts: pd.Series, number_of_standard_deviations: int = 3) -> pd.Series:
-    """
+    '''
     Apply the Scipy Z-Score test to a time series. Flag values based on the number of standard deviations from the mean.
 
     Parameters
@@ -323,16 +275,15 @@ def z_score_test(ts: pd.Series, number_of_standard_deviations: int = 3) -> pd.Se
     --------
     >>> output_ts = z_score_test(ts=df.VALUE)
 
-    """
+    '''
     if ts.empty:
         raise ValueError('No input data.')
     z_score = stats.zscore(ts, nan_policy='omit')
-    output_ts = np.abs(z_score) >= number_of_standard_deviations
-    return output_ts
+    return np.abs(z_score) >= number_of_standard_deviations
 
 
 def modified_z_score_test(ts: pd.Series, median_absolute_deviation: float = 4) -> pd.Series:
-    """
+    '''
     Apply the Scipy Z-Score test to a time series. Flag values based on the number of standard deviations from the mean.
 
     Parameters
@@ -352,12 +303,11 @@ def modified_z_score_test(ts: pd.Series, median_absolute_deviation: float = 4) -
     --------
     >>> output_ts = z_score_test(ts=df.VALUE)
 
-    """
+    '''
     if ts.empty:
         raise ValueError('No input data.')
     modified_z_score = (stats.norm.ppf(3/4) * (ts - ts.median())) / (stats.median_abs_deviation(ts, nan_policy='omit'))
-    output_ts = np.abs(modified_z_score) >= median_absolute_deviation
-    return output_ts
+    return np.abs(modified_z_score) >= median_absolute_deviation
 
 
 def tukey_iqr_test(ts: pd.Series) -> pd.DataFrame:
@@ -387,12 +337,11 @@ def tukey_iqr_test(ts: pd.Series) -> pd.DataFrame:
     iqr = quantiles[0.75] - quantiles[0.25]
     upper_limit = quantiles[0.75] + (iqr*1.5)
     lower_limit = quantiles[0.25] - (iqr*1.5)
-    output_ts = ((ts > upper_limit) | (ts < lower_limit))
-    return output_ts
+    return ((ts > upper_limit) | (ts < lower_limit))
 
 
 def spike_detection_test(ts: pd.Series, factor: float = 1.05) -> pd.DataFrame:
-    """
+    '''
     Identify a spike, defined as a value greater than the mean*factor of the adjacent values, in a time series.
 
     Parameters
@@ -412,16 +361,15 @@ def spike_detection_test(ts: pd.Series, factor: float = 1.05) -> pd.DataFrame:
     --------
     >>> df_out = spike_detection_test(ts)
 
-    """
+    '''
     if ts.empty:
         raise ValueError('No input data.')
     mean_adjacent = (ts.shift(1) + ts.shift(-1)) / 2
-    output_ts = ts > factor*mean_adjacent
-    return output_ts
+    return ts > factor*mean_adjacent
 
 
 def rate_of_change_test(ts: pd.Series, threshold_value: float, previous_number_of_points: int = 5) -> pd.DataFrame:
-    """
+    '''
     The Rate of Change Test compares determines if two values exeed a threshood.
 
     Specifically, the test compares the mean value of the N-m points, where m
@@ -448,13 +396,12 @@ def rate_of_change_test(ts: pd.Series, threshold_value: float, previous_number_o
     --------
     >>> df_out = spike_detection_test(ts)
 
-    """
+    '''
     if ts.empty:
         raise ValueError('No input data.')
     mean_previous = ts.rolling(window=previous_number_of_points).mean()
     difference = ts - mean_previous
-    output_ts = difference.abs() > threshold_value
-    return output_ts
+    return difference.abs() > threshold_value
 
 
 # TODO: make this an object
@@ -505,7 +452,6 @@ OD_IMPLEMENTED = {
     'modified_z_score_test': {
         'fn': modified_z_score_test,
         'plain': 'Modified z-score test',
-        'ts_col_type': 'y',
         'ts_col_type': 'y',
         'args': (
             ('median_absolute_deviation', 'Median Absolute Deviation', float, None),

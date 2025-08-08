@@ -1,19 +1,21 @@
 # Functions and objects related to setting up a UI for outlier detection tests.
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Optional, Any
+from typing import Any
 
-from shiny import ui, reactive, Inputs
+from shiny import Inputs, reactive, ui
 
 from . import od
 from .app_ui import trash_svg
+
 
 @dataclass
 class ODTest:
     '''Represents an outlier detection test'''
     test_key: str # name of test as defined in od.OD_IMPLEMENTED
     test_col: str
-    _fn_kwargs: Optional[dict[str, Any]] = field(default_factory=dict)
-    _user_input_locations: Optional[list[tuple[str, str]]] = field(default_factory=list)
+    _fn_kwargs: dict[str, Any] | None = field(default_factory=dict)
+    _user_input_locations: list[tuple[str, str]] | None = field(default_factory=list)
 
     # This is needed to support adding this object to a set.
     def __hash__(self):
@@ -98,7 +100,7 @@ class ODTestSet:
 
             # Create one input object per test argument
             inputs = []
-            if (args := od.OD_IMPLEMENTED[test.test_key].get('args', None)) == None:
+            if 'args' not in od.OD_IMPLEMENTED[test.test_key]:
                 inputs.append(ui.p('No additional arguments needed.'))
             else:
                 for arg_id, arg_label, arg_type, default_value in od.OD_IMPLEMENTED[test.test_key]['args']:
@@ -107,7 +109,7 @@ class ODTestSet:
                     existing_value = test.get_argument(arg_id, default_value) # can return None
                     print(arg_id, existing_value)
 
-                    if arg_type == str:
+                    if arg_type is str:
                         inputs.append(ui.input_text(input_id, f'{arg_label}:', existing_value))
                     elif arg_type in (int, float):
                         inputs.append(ui.input_numeric(input_id, f'{arg_label}:', existing_value))

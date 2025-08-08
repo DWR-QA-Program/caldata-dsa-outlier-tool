@@ -1,34 +1,26 @@
-import sys
-import math
-import time
 import asyncio
-import inspect
-from io import StringIO, BytesIO
-from pprint import pprint
+import time
 from functools import partial
+from io import BytesIO, StringIO
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_numeric_dtype
-
-from shiny import App, Inputs, Outputs, Session, reactive, render, ui
-from shiny.types import FileInfo, ImgData, SilentException
-
-from shinywidgets import output_widget, render_widget
-import shinyswatch
-
 import plotly.express as px
 import plotly.graph_objs as go
+import shinyswatch
+from shiny import App, Inputs, Outputs, Session, reactive, render, ui
+from shiny.types import FileInfo, SilentException
+from shinywidgets import render_widget
 
-from . import m, od, od_ui, app_ui, util, app_state, upload_util, schema
-from .util import print_func_name, jlog, jlog1, jlog2
+from . import app_state, app_ui, m, od, od_ui, schema, upload_util, util
+from .util import jlog, jlog1, print_func_name
 
 
 def req(variable):
     util.req(variable, output_fn=jlog1)
 
 
-def server(input: Inputs, output: Outputs, session: Session):
+def server(input: Inputs, output: Outputs, session: Session): # noqa: PLR0915
 
     # Enable theme picker
     shinyswatch.theme_picker_server()
@@ -84,12 +76,8 @@ def server(input: Inputs, output: Outputs, session: Session):
 
                     file_obj.save_od_result(test_name, test_col, result)
 
-                    if (elapsed_time := time.perf_counter()-start_time) < .2:
-                        # Slow down text execution so that the progress bar is visible
-                        # even when tests execute quickly.
-                        sleep_duration = .2
-                    else:
-                        sleep_duration = 0
+                    # When tests execute quickly, add a delay so that the progress bar is visible
+                    sleep_duration = m.MIN_DUR if time.perf_counter() - start_time < m.MIN_DUR else 0
 
                     # Free up the event loop to switch tasks so that the UI can respond
                     # to events while tests are running.
@@ -171,11 +159,11 @@ def server(input: Inputs, output: Outputs, session: Session):
         # make sure to refresh a few tabs so that they don't display the previous column names.
         with reactive.isolate():
             # Refresh test ui in test tab
-            if (selected_file := input.sel_files_test()) == fname:
+            if input.sel_files_test() == fname:
                 _initialize_test_ui(file_obj)
 
             # Refresh column names in review tab
-            if (selected_file := input.sel_files_viz()) == fname:
+            if input.sel_files_viz() == fname:
                 _update_x_and_y_cols(file_obj)
 
         upload_msg.set(upload_util.format_upload_msg(
@@ -184,7 +172,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         ))
 
         util.cond_progress_close(progress)
-        jlog1(f'read_file exit')
+        jlog1('read_file exit')
 
 
     # When the user selects a file, they generally expect to see the same selected file on
@@ -461,7 +449,7 @@ def server(input: Inputs, output: Outputs, session: Session):
             # Create the column for controlling markings
             df[categ_name] = df[od_cols].apply(util.get_row_label, axis=1)
             px_kwargs['category_orders'] = {
-                categ_name: [m.PASS] + od_cols # keep 'pass' first
+                categ_name: [m.PASS, *od_cols] # keep 'pass' first
             }
 
             # Create column to show (on hover) what tests failed for a data point
@@ -475,11 +463,14 @@ def server(input: Inputs, output: Outputs, session: Session):
         df[m.IDX] = df.index
 
         # Add unit to y-axis label
-        if schema is not None and (col_obj := schema.get(y_col, None)) is not None:
-            if col_obj.units is not None:
-                px_kwargs['labels'] = {
-                    y_col: f'{y_col} ({col_obj.units})'
-                }
+        if all((
+            schema is not None,
+            (col_obj := schema.get(y_col, None)) is not None,
+            col_obj.units is not None
+        )):
+            px_kwargs['labels'] = {
+                y_col: f'{y_col} ({col_obj.units})'
+            }
 
         # We need the graph as a widget so we can register callbacks.
         fig = go.FigureWidget(px.scatter(
@@ -527,10 +518,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         # that 1 element for selected indices.
         df_indices = trace.customdata[points.point_inds, 0]
 
-        if trace_num == 0:
-            selected_points = df_indices
-        else:
-            selected_points = np.append(selected_points, df_indices)
+        selected_points = df_indices if trace_num == 0 else np.append(selected_points, df_indices)
 
 
     # Prevent manual flagging buttons from doing anything when data is deselected
@@ -574,12 +562,11 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     def manual_flag(value: bool) -> None:
         if len(selected_points) == 0:
-            util.show_warning(f'No data points are selected. Use the box or lasso selector in the top right.')
+            util.show_warning('No data points are selected. Use the box or lasso selector in the top right.')
             return
 
         with reactive.isolate():
             df = active_df()
-            x_col = input.sel_x()
             y_col = input.sel_y()
 
         manual_y_col = od.get_manual_col(y_col)
@@ -621,7 +608,7 @@ def server(input: Inputs, output: Outputs, session: Session):
             reset_graph_selection() # could be removed if the graph isn't always reloaded
         except Exception as e:
             if not isinstance(e, SilentException):
-                ui.notification_show(ui.p(f'Please report this to James: "flag": {repr(e)}'), duration=None, type='error')
+                ui.notification_show(ui.p(f'Please report this to the admin: "flag": {e!r}'), duration=None, type='error')
 
 
     @reactive.effect
@@ -632,7 +619,7 @@ def server(input: Inputs, output: Outputs, session: Session):
             reset_graph_selection() # could be removed if the graph isn't always reloaded
         except Exception as e:
             if not isinstance(e, SilentException):
-                ui.notification_show(ui.p(f'Please report this to James: "unflag": {repr(e)}'), duration=None, type='error')
+                ui.notification_show(ui.p(f'Please report this to the admin: "unflag": {e!r}'), duration=None, type='error')
 
 
     @reactive.effect
@@ -689,7 +676,7 @@ def server(input: Inputs, output: Outputs, session: Session):
 
     @reactive.effect
     def react_to_new_selected_file():
-        req(selected_file := input.sel_files_viz())
+        req(input.sel_files_viz())
         reset_manual_flag_objects()
 
 
@@ -823,9 +810,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         tests = user_selected_tests()
 
         # Set up accordion objects
-        right_ui = ui.panel_well(tests.get_ui(input))
-
-        return right_ui
+        return ui.panel_well(tests.get_ui(input))
 
 
     @reactive.effect
@@ -929,8 +914,10 @@ def server(input: Inputs, output: Outputs, session: Session):
     #
     od_task = reactive.ExtendedTask(run_od)
 
+    # Set up list of anonymous functions with reactive effects. These will be
+    # executed by the framework automatically.
     selectors = app_ui.get_file_selector_names()
-    fn_list = [ # list of anonymous functions with reactive effects
+    fn_list = [ # noqa: F841
         sync_selector(curr_selector, [s for s in selectors if s != curr_selector])
         for curr_selector in selectors
     ]
