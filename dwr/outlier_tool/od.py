@@ -12,7 +12,7 @@ from scipy import stats
 from . import app_state
 from .m import _F, MANUAL, MULTIPLE_FAILURES, PASS
 
-DATE_STRS = [ # maybe rename this
+DATE_STRS = [  # maybe rename this
     'days',
     'hours',
     'minutes',
@@ -31,12 +31,15 @@ def get_manual_col(y_col):
 # Help identify all columns that are the result of running outlier detection on a column
 # or manual flagging.
 def get_od_names(df, test_col):
-    return [col
+    return [
+        col
         for col in df.columns
-        if any((
-            get_od_name('', test_col) in col,
-            get_manual_col(test_col) in col,
-        ))
+        if any(
+            (
+                get_od_name('', test_col) in col,
+                get_manual_col(test_col) in col,
+            )
+        )
     ]
 
 
@@ -54,11 +57,11 @@ def get_od_col_renames(od_cols) -> dict[str, str]:
 
     renames = {}
     for col in od_cols:
-        if MANUAL in col: # manual flag
+        if MANUAL in col:  # manual flag
             renames[col] = MANUAL
         else:
-            value = col[col.find(_F):].lstrip('_') # remove internal text
-            value = value.replace('_', ' ').capitalize() # make name look better
+            value = col[col.find(_F) :].lstrip('_')  # remove internal text
+            value = value.replace('_', ' ').capitalize()  # make name look better
             renames[col] = value
 
     # Internal names need to be in the rename mapping to prevent errors but we
@@ -70,11 +73,13 @@ def get_od_col_renames(od_cols) -> dict[str, str]:
 
 def apply_renames(figure, renames) -> None:
     if renames:
-        figure.for_each_trace(lambda x: x.update(
-                name = renames[x.name],
-                legendgroup = renames[x.name],
-                hovertemplate = x.hovertemplate.replace(x.name, renames[x.name])
-            ))
+        figure.for_each_trace(
+            lambda x: x.update(
+                name=renames[x.name],
+                legendgroup=renames[x.name],
+                hovertemplate=x.hovertemplate.replace(x.name, renames[x.name]),
+            )
+        )
 
 
 # Returns list of default tests we can run on any dataset
@@ -94,7 +99,7 @@ def get_default_tests(file: app_state.File):
 
 
 def gross_range_test(ts, minimum, maximum) -> pd.Series:
-    '''
+    """
     Apply a gross range test to a time series. Values outside of the provided minimum
     and/or maximum will be flagged as failing. Values matching the min/max will pass.
 
@@ -116,7 +121,7 @@ def gross_range_test(ts, minimum, maximum) -> pd.Series:
     --------
     >>> df['failed_test'] = gross_range_test(df['test_column'], 0, 100)
 
-    '''
+    """
     if ts.empty:
         raise ValueError('No input data.')
     if minimum is None and maximum is None:
@@ -139,35 +144,35 @@ def time_gap_test_auto(ts: pd.Series) -> pd.Series:
 
 
 def time_gap_test(ts: pd.Series, number: int, unit: str, delta=None) -> pd.Series:
-    '''
-    Apply a time gap test. Any gap between data points, either larger or smaller than
-the provided cadence, will be flagged as invalid.  Specifically, the value that
-*follows* a gap will be flagged as failing this test.
+    """
+        Apply a time gap test. Any gap between data points, either larger or smaller than
+    the provided cadence, will be flagged as invalid.  Specifically, the value that
+    *follows* a gap will be flagged as failing this test.
 
-    Parameters
-    ----------
-    ts : pd.Series
-        A pandas series with a datetime data type.
+        Parameters
+        ----------
+        ts : pd.Series
+            A pandas series with a datetime data type.
 
-    number : int
-        number of (ex: days, hours, etc) to define the expected cadence of the data.
+        number : int
+            number of (ex: days, hours, etc) to define the expected cadence of the data.
 
-    unit : str
-        Type of time unit to measure (ex: days, hours). pandas.Timedelta must support this.
+        unit : str
+            Type of time unit to measure (ex: days, hours). pandas.Timedelta must support this.
 
-    delta : pd.Timedelta
-        Optional argument that overrides the "number" and "unit" arguments.
+        delta : pd.Timedelta
+            Optional argument that overrides the "number" and "unit" arguments.
 
-    Returns
-    -------
-    pd.Series
-        A boolean series with the same index as time_series.
+        Returns
+        -------
+        pd.Series
+            A boolean series with the same index as time_series.
 
-    Examples
-    --------
-    >>> df['failed_test'] = time_gap_test(df['test_column'], number=1, unit='days'))
+        Examples
+        --------
+        >>> df['failed_test'] = time_gap_test(df['test_column'], number=1, unit='days'))
 
-    '''
+    """
     if ts.empty:
         raise ValueError('No input data.')
     if not is_datetime64_any_dtype(ts):
@@ -188,7 +193,7 @@ the provided cadence, will be flagged as invalid.  Specifically, the value that
 
 # TODO: test this function
 def value_gap_test(ts: pd.Series) -> pd.Series:
-    '''
+    """
     Apply a value gap test to a time series.
 
     Parameters
@@ -205,7 +210,7 @@ def value_gap_test(ts: pd.Series) -> pd.Series:
     --------
     >>> df['failed_test'] = value_gap_test(df['test_column'])
 
-    '''
+    """
     if ts.empty:
         raise ValueError('No input data.')
 
@@ -213,7 +218,7 @@ def value_gap_test(ts: pd.Series) -> pd.Series:
 
 
 def flat_line_test(ts: pd.Series, number_of_repeated_values: int = 2) -> pd.Series:
-    '''
+    """
     Apply a flat line test to a time series.
 
     Parameters
@@ -233,7 +238,7 @@ def flat_line_test(ts: pd.Series, number_of_repeated_values: int = 2) -> pd.Seri
     --------
     >>> df['failed_test'] = flat_line_test(df['test_column'])
 
-    '''
+    """
     if ts.empty:
         raise ValueError('No input data.')
     if number_of_repeated_values is None:
@@ -255,7 +260,7 @@ def flat_line_test(ts: pd.Series, number_of_repeated_values: int = 2) -> pd.Seri
 
 
 def z_score_test(ts: pd.Series, number_of_standard_deviations: int = 3) -> pd.Series:
-    '''
+    """
     Apply the Scipy Z-Score test to a time series. Flag values based on the number of standard deviations from the mean.
 
     Parameters
@@ -275,7 +280,7 @@ def z_score_test(ts: pd.Series, number_of_standard_deviations: int = 3) -> pd.Se
     --------
     >>> output_ts = z_score_test(ts=df.VALUE)
 
-    '''
+    """
     if ts.empty:
         raise ValueError('No input data.')
     z_score = stats.zscore(ts, nan_policy='omit')
@@ -283,7 +288,7 @@ def z_score_test(ts: pd.Series, number_of_standard_deviations: int = 3) -> pd.Se
 
 
 def modified_z_score_test(ts: pd.Series, median_absolute_deviation: float = 4) -> pd.Series:
-    '''
+    """
     Apply the Scipy Z-Score test to a time series. Flag values based on the number of standard deviations from the mean.
 
     Parameters
@@ -303,10 +308,12 @@ def modified_z_score_test(ts: pd.Series, median_absolute_deviation: float = 4) -
     --------
     >>> output_ts = z_score_test(ts=df.VALUE)
 
-    '''
+    """
     if ts.empty:
         raise ValueError('No input data.')
-    modified_z_score = (stats.norm.ppf(3/4) * (ts - ts.median())) / (stats.median_abs_deviation(ts, nan_policy='omit'))
+    modified_z_score = (stats.norm.ppf(3 / 4) * (ts - ts.median())) / (
+        stats.median_abs_deviation(ts, nan_policy='omit')
+    )
     return np.abs(modified_z_score) >= median_absolute_deviation
 
 
@@ -335,13 +342,13 @@ def tukey_iqr_test(ts: pd.Series) -> pd.DataFrame:
     quantiles = ts.quantile([0.25, 0.75])
     np.squeeze(np.diff(quantiles, axis=0) / c)
     iqr = quantiles[0.75] - quantiles[0.25]
-    upper_limit = quantiles[0.75] + (iqr*1.5)
-    lower_limit = quantiles[0.25] - (iqr*1.5)
-    return ((ts > upper_limit) | (ts < lower_limit))
+    upper_limit = quantiles[0.75] + (iqr * 1.5)
+    lower_limit = quantiles[0.25] - (iqr * 1.5)
+    return (ts > upper_limit) | (ts < lower_limit)
 
 
 def spike_detection_test(ts: pd.Series, factor: float = 1.05) -> pd.DataFrame:
-    '''
+    """
     Identify a spike, defined as a value greater than the mean*factor of the adjacent values, in a time series.
 
     Parameters
@@ -361,15 +368,17 @@ def spike_detection_test(ts: pd.Series, factor: float = 1.05) -> pd.DataFrame:
     --------
     >>> df_out = spike_detection_test(ts)
 
-    '''
+    """
     if ts.empty:
         raise ValueError('No input data.')
     mean_adjacent = (ts.shift(1) + ts.shift(-1)) / 2
-    return ts > factor*mean_adjacent
+    return ts > factor * mean_adjacent
 
 
-def rate_of_change_test(ts: pd.Series, threshold_value: float, previous_number_of_points: int = 5) -> pd.DataFrame:
-    '''
+def rate_of_change_test(
+    ts: pd.Series, threshold_value: float, previous_number_of_points: int = 5
+) -> pd.DataFrame:
+    """
     The Rate of Change Test compares determines if two values exeed a threshood.
 
     Specifically, the test compares the mean value of the N-m points, where m
@@ -396,7 +405,7 @@ def rate_of_change_test(ts: pd.Series, threshold_value: float, previous_number_o
     --------
     >>> df_out = spike_detection_test(ts)
 
-    '''
+    """
     if ts.empty:
         raise ValueError('No input data.')
     mean_previous = ts.rolling(window=previous_number_of_points).mean()
@@ -414,7 +423,7 @@ OD_IMPLEMENTED = {
             ('minimum', 'Min', float, None),
             ('maximum', 'Max', float, None),
         ),
-        'col_widths': (6,6), # this affects input sizes in accordions
+        'col_widths': (6, 6),  # this affects input sizes in accordions
     },
     'time_gap_test': {
         'fn': time_gap_test,
@@ -424,7 +433,7 @@ OD_IMPLEMENTED = {
             ('number', 'Number', int, None),
             ('unit', 'Unit', 'date_unit', None),
         ),
-        'col_widths': (6,6),
+        'col_widths': (6, 6),
     },
     'value_gap_test': {
         'fn': value_gap_test,
@@ -435,27 +444,21 @@ OD_IMPLEMENTED = {
         'fn': flat_line_test,
         'plain': 'Flat line test',
         'ts_col_type': 'xy',
-        'args': (
-            ('number_of_repeated_values', 'Repeated Values', int, 2),
-        ),
+        'args': (('number_of_repeated_values', 'Repeated Values', int, 2),),
         'col_widths': (6,),
     },
     'z_score_test': {
         'fn': z_score_test,
         'plain': 'Z-score test',
         'ts_col_type': 'y',
-        'args': (
-            ('number_of_standard_deviations', 'Standard Deviations', int, 3),
-        ),
+        'args': (('number_of_standard_deviations', 'Standard Deviations', int, 3),),
         'col_widths': (6,),
     },
     'modified_z_score_test': {
         'fn': modified_z_score_test,
         'plain': 'Modified z-score test',
         'ts_col_type': 'y',
-        'args': (
-            ('median_absolute_deviation', 'Median Absolute Deviation', float, None),
-        ),
+        'args': (('median_absolute_deviation', 'Median Absolute Deviation', float, None),),
         'col_widths': (6,),
     },
     'tukey_iqr_test': {
@@ -467,9 +470,7 @@ OD_IMPLEMENTED = {
         'fn': spike_detection_test,
         'plain': 'Spike detection test',
         'ts_col_type': 'y',
-        'args': (
-            ('factor', 'Factor', float, 1),
-        ),
+        'args': (('factor', 'Factor', float, 1),),
         'col_widths': (6,),
     },
     'rate_of_change_test': {
@@ -480,6 +481,6 @@ OD_IMPLEMENTED = {
             ('threshold_value', 'Threshold Value', float, None),
             ('previous_number_of_points', 'Previous Points', int, None),
         ),
-        'col_widths': (6,6),
-    }
+        'col_widths': (6, 6),
+    },
 }

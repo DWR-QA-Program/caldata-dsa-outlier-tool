@@ -75,6 +75,7 @@ lint.ignore = [
   "RET505", # no-else-return
   "RET506", # no-else-raise
   "RUF006", # force storing return values
+  "Q001", # multiline quotes
 ]
 target-version = "py310"
 
@@ -87,4 +88,3 @@ quote-style = "single"
 [tool.ruff.lint.flake8-quotes]
 inline-quotes = "single"
 multiline-quotes = "single"
-docstring-quotes = "single"

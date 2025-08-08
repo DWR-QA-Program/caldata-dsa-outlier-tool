@@ -16,14 +16,15 @@ _DATETIME = ('datetime',)
 
 @dataclass
 class Column:
-    '''Represents a column from a data dictionary.'''
+    """Represents a column from a data dictionary."""
+
     name: str
     type: str
-    description: str | None = None # Optional field, defaults to None
+    description: str | None = None  # Optional field, defaults to None
     units: str | None = None
     min: int | float | None = None
     max: int | float | None = None
-    _orig_name: str = None # stores original column name from file
+    _orig_name: str = None  # stores original column name from file
 
     def __post_init__(self):
         self._orig_name = self.name
@@ -41,7 +42,8 @@ class Column:
 # TODO: json schema validation
 @dataclass
 class Schema:
-    '''Class to hold information about a custom data schema.'''
+    """Class to hold information about a custom data schema."""
+
     name: str
     columns: list[Column] | None
     description: str | None = ''
@@ -63,21 +65,20 @@ class Schema:
 
     @classmethod
     def from_dict(cls, data: dict) -> 'Schema':
-        '''Creates a Schema object from a dictionary (parsed JSON).'''
-        columns = [Column(**col) for col in data.get('columns', {})] # Unpack dict into Column constructor
+        """Creates a Schema object from a dictionary (parsed JSON)."""
+        columns = [Column(**col) for col in data.get('columns', {})]  # Unpack dict into Column constructor
 
         return cls(
             name=data['name'],
             description=data.get('description', ''),
             file_format_description=data.get('file_format_description', ''),
             pandas_read_csv_arguments=data.get('pandas_read_csv_arguments', {}),
-            columns=columns
+            columns=columns,
         )
-
 
     @classmethod
     def from_file(cls, file_path: str | os.PathLike) -> 'Schema':
-        '''Loads and parses a JSON file into a Schema instance.'''
+        """Loads and parses a JSON file into a Schema instance."""
         with open(file_path) as f:
             data = json.load(f)
         return cls.from_dict(data)
@@ -115,12 +116,11 @@ def get_file_format_info(name: str):
     if schema := get_schema(name):
         return schema.file_format_description
     else:
-        return '''Currently, no file format is selected. Please ensure your uploaded file
+        return """Currently, no file format is selected. Please ensure your uploaded file
             contains either one header row followed by your data, or just your data rows
             without a header. If you choose not to include a header, we'll create generic
             column names for you to use.
-        '''
-
+        """
 
 
 SCHEMAS = parse_schemas()
