@@ -1,35 +1,26 @@
-import sys
-import math
-import time
 import asyncio
-import inspect
-from io import StringIO, BytesIO
-from pprint import pprint
+import time
 from functools import partial
+from io import BytesIO, StringIO
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_numeric_dtype
-
-from shiny import App, Inputs, Outputs, Session, reactive, render, ui
-from shiny.types import FileInfo, ImgData, SilentException
-
-from shinywidgets import output_widget, render_widget
-import shinyswatch
-
 import plotly.express as px
 import plotly.graph_objs as go
+import shinyswatch
+from shiny import App, Inputs, Outputs, Session, reactive, render, ui
+from shiny.types import FileInfo, SilentException
+from shinywidgets import render_widget
 
-from . import m, od, od_ui, app_ui, util, app_state, upload_util, schema
-from .util import print_func_name, jlog, jlog1, jlog2
+from . import app_state, app_ui, m, od, od_ui, schema, upload_util, util
+from .util import jlog, jlog1, print_func_name
 
 
 def req(variable):
     util.req(variable, output_fn=jlog1)
 
 
-def server(input: Inputs, output: Outputs, session: Session):
-
+def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
     # Enable theme picker
     shinyswatch.theme_picker_server()
 
@@ -47,14 +38,13 @@ def server(input: Inputs, output: Outputs, session: Session):
     selected_points = []
 
     # Values used to display dynamic content in the test setup page
-    test_setup_info = reactive.Value({}) # left column: test setup options
-    user_selected_tests = reactive.Value(od_ui.ODTestSet()) # right column: selected tests
+    test_setup_info = reactive.Value({})  # left column: test setup options
+    user_selected_tests = reactive.Value(od_ui.ODTestSet())  # right column: selected tests
 
     # Lists of flagging operations, to support the undo/redo buttons.
     # TODO: add undo size limit?
     undo_stack = []
     redo_stack = []
-
 
     async def run_od(test_list, file_obj: app_state.File):
         try:
@@ -63,11 +53,10 @@ def server(input: Inputs, output: Outputs, session: Session):
             df = file_obj.df
 
             with ui.Progress(min=0, max=n_tests) as p:
-
                 for i, (test_fn, test_col, kwargs) in enumerate(test_list):
                     test_name = test_fn.__name__
 
-                    msg = f'({i+1}/{n_tests})'
+                    msg = f'({i + 1}/{n_tests})'
                     p.set(i, message=msg, detail=f'{test_name}')
 
                     jlog1(f'{test_fn.__name__}: {test_col}')
@@ -84,12 +73,8 @@ def server(input: Inputs, output: Outputs, session: Session):
 
                     file_obj.save_od_result(test_name, test_col, result)
 
-                    if (elapsed_time := time.perf_counter()-start_time) < .2:
-                        # Slow down text execution so that the progress bar is visible
-                        # even when tests execute quickly.
-                        sleep_duration = .2
-                    else:
-                        sleep_duration = 0
+                    # When tests execute quickly, add a delay so that the progress bar is visible
+                    sleep_duration = m.MIN_DUR if time.perf_counter() - start_time < m.MIN_DUR else 0
 
                     # Free up the event loop to switch tasks so that the UI can respond
                     # to events while tests are running.
@@ -100,15 +85,14 @@ def server(input: Inputs, output: Outputs, session: Session):
         except Exception as e:
             util.show_error(f'Internal error: {e}', duration=5)
 
-
     @reactive.effect
     @print_func_name
     def read_file():
         file: list[FileInfo] | None = input.file1()
         req(file)
 
-        fpath = file[0]['datapath'] # file path internal to browser, only used here
-        fname = file[0]['name'] # file name used as unique key, used in many functions
+        fpath = file[0]['datapath']  # file path internal to browser, only used here
+        fname = file[0]['name']  # file name used as unique key, used in many functions
         fsize = util.get_file_size(fpath)
         fsize_mb = round(fsize / 1_000_000, 1)
 
@@ -119,8 +103,10 @@ def server(input: Inputs, output: Outputs, session: Session):
             )
             return
         elif fsize > m.WARN_FILE_SIZE_BYTES:
-            util.show_warning(f'File sizes greater than {m.WARN_FILE_SIZE_MB} MB may cause performance issues.')
-            progress = ui.Progress(0, 3) # this needs to be closed before the function completes
+            util.show_warning(
+                f'File sizes greater than {m.WARN_FILE_SIZE_MB} MB may cause performance issues.'
+            )
+            progress = ui.Progress(0, 3)  # this needs to be closed before the function completes
         else:
             progress = None
 
@@ -171,21 +157,17 @@ def server(input: Inputs, output: Outputs, session: Session):
         # make sure to refresh a few tabs so that they don't display the previous column names.
         with reactive.isolate():
             # Refresh test ui in test tab
-            if (selected_file := input.sel_files_test()) == fname:
+            if input.sel_files_test() == fname:
                 _initialize_test_ui(file_obj)
 
             # Refresh column names in review tab
-            if (selected_file := input.sel_files_viz()) == fname:
+            if input.sel_files_viz() == fname:
                 _update_x_and_y_cols(file_obj)
 
-        upload_msg.set(upload_util.format_upload_msg(
-            fname,
-            **msg_kw
-        ))
+        upload_msg.set(upload_util.format_upload_msg(fname, **msg_kw))
 
         util.cond_progress_close(progress)
-        jlog1(f'read_file exit')
-
+        jlog1('read_file exit')
 
     # When the user selects a file, they generally expect to see the same selected file on
     # all navigation tabs. We keep all file selectors in sync here to meet this expectation.
@@ -195,11 +177,11 @@ def server(input: Inputs, output: Outputs, session: Session):
         @reactive.effect
         def sync_fn():
             selected_value = input[sel_obj]()
-            with reactive.isolate(): # prevent infinite reactive loop
+            with reactive.isolate():  # prevent infinite reactive loop
                 for selector_name in other_sel_objs:
                     ui.update_select(selector_name, selected=selected_value)
-        return sync_fn
 
+        return sync_fn
 
     @render.ui
     def file_format_info():
@@ -207,17 +189,14 @@ def server(input: Inputs, output: Outputs, session: Session):
         description, extended_description = schema.get_file_format_info(input.sel_file_format())
         return (ui.p(description), ui.p(extended_description))
 
-
     @render.ui
     def upload_text():
         return upload_msg()
-
 
     @render.ui
     def show_rows_to_skip():
         req(input.checkbox_skip_n_rows())
         return ui.input_numeric('input_skip_n_rows', 'Number of rows:', 0, min=0)
-
 
     # Show upload options when no file format is selected
     @render.ui
@@ -227,22 +206,15 @@ def server(input: Inputs, output: Outputs, session: Session):
             return None
         return app_ui.show_upload_options()
 
-
     def _update_x_cols(file_obj: app_state.File):
-        ui.update_select('sel_x',
-            choices=file_obj.date_cols,
-            selected=file_obj.last_selected_x_col
-        )
+        ui.update_select('sel_x', choices=file_obj.date_cols, selected=file_obj.last_selected_x_col)
+
     def _update_y_cols(file_obj: app_state.File):
-        ui.update_select('sel_y',
-            choices=file_obj.num_cols,
-            selected=file_obj.last_selected_y_col
-        )
+        ui.update_select('sel_y', choices=file_obj.num_cols, selected=file_obj.last_selected_y_col)
 
     def _update_x_and_y_cols(file_obj: app_state.File):
         _update_x_cols(file_obj)
         _update_y_cols(file_obj)
-
 
     # There are 2 selectors for an x and y column on the review page - this function
     # keeps them in sync with the selected file on that page.
@@ -257,7 +229,6 @@ def server(input: Inputs, output: Outputs, session: Session):
         active_df.set(file_obj.df)
         jlog1(f'updated: x={file_obj.last_selected_x_col}, y={file_obj.last_selected_y_col}')
 
-
     @reactive.effect
     def track_selected_x_col():
         req(selected_file := input.sel_files_viz())
@@ -265,14 +236,12 @@ def server(input: Inputs, output: Outputs, session: Session):
 
         user_state().get_file(selected_file).last_selected_x_col = x_col
 
-
     @reactive.effect
     def track_selected_y_col():
         req(selected_file := input.sel_files_viz())
         req(y_col := input.sel_y())
 
         user_state().get_file(selected_file).last_selected_y_col = y_col
-
 
     @reactive.effect
     @reactive.event(input.btn_od)
@@ -317,7 +286,6 @@ def server(input: Inputs, output: Outputs, session: Session):
         # Finally, actually run the outlier detection
         od_task.invoke(test_list, file_obj)
 
-
     @render.data_frame
     @reactive.calc
     @print_func_name
@@ -342,7 +310,6 @@ def server(input: Inputs, output: Outputs, session: Session):
         asyncio.create_task(label_columns(list(df.columns.map(mapper))))
         return df
 
-
     # This function updates our reactive dataframes so that when outlier detection
     # tests are finished running, the results dataframe and plot will update as well.
     def refresh_od_results_manual(file_obj):
@@ -357,17 +324,16 @@ def server(input: Inputs, output: Outputs, session: Session):
 
         results_df.set(file_obj.output_results_as_df())
 
-
     # Set up od results table to update automatically when a new file is selected
     @reactive.effect
     def refresh_od_results_auto_test():
         req(selected_file := input.sel_files_test())
         return refresh_od_results_manual(user_state().get_file(selected_file))
+
     @reactive.effect
     def refresh_od_results_auto_viz():
         req(selected_file := input.sel_files_viz())
         return refresh_od_results_manual(user_state().get_file(selected_file))
-
 
     # TODO: update this when flagging happens??
     @render.data_frame
@@ -375,13 +341,13 @@ def server(input: Inputs, output: Outputs, session: Session):
     def od_results_table():
         req(df := results_df())
         return df
+
     # TODO: update this when flagging happens
     @render.data_frame
     @reactive.calc
     def od_results_table_viz():
         req(df := results_df())
         return df
-
 
     # Generate the data we will let the user download. To do so, we filter out
     # some columns and apply light transformations to outlier detection results.
@@ -400,15 +366,16 @@ def server(input: Inputs, output: Outputs, session: Session):
 
         # Loop through any remaining outlier test columns and convert them from true/false
         # to something more easily interpreted
-        with pd.option_context('mode.chained_assignment', None): # ignore warning
+        with pd.option_context('mode.chained_assignment', None):  # ignore warning
             for c in df.columns:
                 if c in od_cols:
-                    df[c] = df[c].map({
-                        False: np.nan,
-                        True: 'failed',
-                    })
+                    df[c] = df[c].map(
+                        {
+                            False: np.nan,
+                            True: 'failed',
+                        }
+                    )
         return df
-
 
     @render.data_frame
     @print_func_name('green')
@@ -427,7 +394,6 @@ def server(input: Inputs, output: Outputs, session: Session):
 
         return df
 
-
     @render_widget
     @print_func_name
     def plot_data():
@@ -442,7 +408,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         # This happens when the file input value has been changed but the change
         # hasn't propagated to the inputs yet
         if x_col not in df or y_col not in df:
-            req(False) # returning None will wipe out the graph
+            req(False)  # returning None will wipe out the graph
 
         req(selected_file := input.sel_files_viz())
         file_obj = user_state().get_file(selected_file)
@@ -461,7 +427,7 @@ def server(input: Inputs, output: Outputs, session: Session):
             # Create the column for controlling markings
             df[categ_name] = df[od_cols].apply(util.get_row_label, axis=1)
             px_kwargs['category_orders'] = {
-                categ_name: [m.PASS] + od_cols # keep 'pass' first
+                categ_name: [m.PASS, *od_cols]  # keep 'pass' first
             }
 
             # Create column to show (on hover) what tests failed for a data point
@@ -475,20 +441,15 @@ def server(input: Inputs, output: Outputs, session: Session):
         df[m.IDX] = df.index
 
         # Add unit to y-axis label
-        if schema is not None and (col_obj := schema.get(y_col, None)) is not None:
-            if col_obj.units is not None:
-                px_kwargs['labels'] = {
-                    y_col: f'{y_col} ({col_obj.units})'
-                }
+        if (
+            schema is not None
+            and (col_obj := schema.get(y_col, None)) is not None
+            and col_obj.units is not None
+        ):
+            px_kwargs['labels'] = {y_col: f'{y_col} ({col_obj.units})'}
 
         # We need the graph as a widget so we can register callbacks.
-        fig = go.FigureWidget(px.scatter(
-            df,
-            x=x_col,
-            y=y_col,
-            custom_data=m.IDX,
-            **px_kwargs
-        ))
+        fig = go.FigureWidget(px.scatter(df, x=x_col, y=y_col, custom_data=m.IDX, **px_kwargs))
 
         # Set the "modebar" at the top right of the plot to always display, rather
         # than only display on hover.
@@ -509,7 +470,6 @@ def server(input: Inputs, output: Outputs, session: Session):
 
         return fig
 
-
     # Note about callbacks: Plotly catches and completely ignores exceptions within
     # callback functions. We catch and print them to make debugging possible.
 
@@ -527,11 +487,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         # that 1 element for selected indices.
         df_indices = trace.customdata[points.point_inds, 0]
 
-        if trace_num == 0:
-            selected_points = df_indices
-        else:
-            selected_points = np.append(selected_points, df_indices)
-
+        selected_points = df_indices if trace_num == 0 else np.append(selected_points, df_indices)
 
     # Prevent manual flagging buttons from doing anything when data is deselected
     @util.catch_errors
@@ -539,9 +495,8 @@ def server(input: Inputs, output: Outputs, session: Session):
         nonlocal selected_points
         selected_points = []
 
-
-    def set_flags(indices: list, cols: list[str], value: bool|list[bool]) -> None:
-        '''
+    def set_flags(indices: list, cols: list[str], value: bool | list[bool]) -> None:
+        """
         Updates the manual flags of the active dataframe. The whole dataframe won't be
         updated, just the relevant rows and columns specified by "indices" and "cols",
         respectively.
@@ -554,7 +509,7 @@ def server(input: Inputs, output: Outputs, session: Session):
             List of columns to apply "value" to.
         value : bool or list of bools
             The value(s) we want to set our dataframe's selected rows/columns to.
-        '''
+        """
 
         req(selected_file := input.sel_files_viz())
 
@@ -571,21 +526,21 @@ def server(input: Inputs, output: Outputs, session: Session):
         user_state().get_file(selected_file).df = dfcp
         active_df.set(dfcp)
 
-
     def manual_flag(value: bool) -> None:
         if len(selected_points) == 0:
-            util.show_warning(f'No data points are selected. Use the box or lasso selector in the top right.')
+            util.show_warning(
+                'No data points are selected. Use the box or lasso selector in the top right.'
+            )
             return
 
         with reactive.isolate():
             df = active_df()
-            x_col = input.sel_x()
             y_col = input.sel_y()
 
         manual_y_col = od.get_manual_col(y_col)
 
         if manual_y_col not in df:
-            df[manual_y_col] = False # Populate entire column with False initially
+            df[manual_y_col] = False  # Populate entire column with False initially
 
         if value:
             # We want to flag a column
@@ -612,35 +567,36 @@ def server(input: Inputs, output: Outputs, session: Session):
 
         invalidate_file_selector('sel_files_export')
 
-
     @reactive.effect
     @reactive.event(input.btn_flag)
     def flag():
         try:
             manual_flag(True)
-            reset_graph_selection() # could be removed if the graph isn't always reloaded
+            reset_graph_selection()  # could be removed if the graph isn't always reloaded
         except Exception as e:
             if not isinstance(e, SilentException):
-                ui.notification_show(ui.p(f'Please report this to James: "flag": {repr(e)}'), duration=None, type='error')
-
+                ui.notification_show(
+                    ui.p(f'Please report this to the admin: "flag": {e!r}'), duration=None, type='error'
+                )
 
     @reactive.effect
     @reactive.event(input.btn_unflag)
     def unflag():
         try:
             manual_flag(False)
-            reset_graph_selection() # could be removed if the graph isn't always reloaded
+            reset_graph_selection()  # could be removed if the graph isn't always reloaded
         except Exception as e:
             if not isinstance(e, SilentException):
-                ui.notification_show(ui.p(f'Please report this to James: "unflag": {repr(e)}'), duration=None, type='error')
-
+                ui.notification_show(
+                    ui.p(f'Please report this to the admin: "unflag": {e!r}'), duration=None, type='error'
+                )
 
     @reactive.effect
     @reactive.event(input.btn_undo_flag)
     def undo_flag():
         try:
             sel, cols, prev, curr = undo_stack.pop()
-        except IndexError: # nothing to undo
+        except IndexError:  # nothing to undo
             return
 
         redo_stack.append((sel, cols, prev, curr))
@@ -651,13 +607,12 @@ def server(input: Inputs, output: Outputs, session: Session):
 
         set_flags(sel, cols, prev)
 
-
     @reactive.effect
     @reactive.event(input.btn_redo_flag)
     def redo_flag():
         try:
             sel, cols, prev, curr = redo_stack.pop()
-        except IndexError: # nothing to redo
+        except IndexError:  # nothing to redo
             return
 
         undo_stack.append((sel, cols, prev, curr))
@@ -668,7 +623,6 @@ def server(input: Inputs, output: Outputs, session: Session):
 
         set_flags(sel, cols, curr)
 
-
     def reset_flag_stacks():
         nonlocal redo_stack, undo_stack
         undo_stack = []
@@ -676,22 +630,18 @@ def server(input: Inputs, output: Outputs, session: Session):
         unemphasize_undo_button()
         unemphasize_redo_button()
 
-
     def reset_graph_selection():
         nonlocal selected_points
         selected_points = []
-
 
     def reset_manual_flag_objects():
         reset_flag_stacks()
         reset_graph_selection()
 
-
     @reactive.effect
     def react_to_new_selected_file():
-        req(selected_file := input.sel_files_viz())
+        req(input.sel_files_viz())
         reset_manual_flag_objects()
-
 
     @reactive.effect
     def react_to_new_screen_cols():
@@ -700,31 +650,35 @@ def server(input: Inputs, output: Outputs, session: Session):
         req(sel_x or sel_y)
         reset_manual_flag_objects()
 
-
     def emphasize_undo_button():
         asyncio.create_task(update_button_class('btn_undo_flag', 'btn-light', 'btn-warning'))
+
     def unemphasize_undo_button():
         asyncio.create_task(update_button_class('btn_undo_flag', 'btn-warning', 'btn-light'))
+
     def emphasize_redo_button():
         asyncio.create_task(update_button_class('btn_redo_flag', 'btn-light', 'btn-info'))
+
     def unemphasize_redo_button():
         asyncio.create_task(update_button_class('btn_redo_flag', 'btn-info', 'btn-light'))
+
     def emphasize_run_tests_button():
         asyncio.create_task(update_button_class('btn_od', 'btn-light', 'btn-info'))
+
     def unemphasize_run_tests_button():
         asyncio.create_task(update_button_class('btn_od', 'btn-info', 'btn-light'))
 
-
     def _initialize_test_ui(file_obj):
-        test_setup_info.set({
-            'x_columns': file_obj.date_cols,
-            'y_columns': file_obj.num_cols,
-            'tests': od.OD_IMPLEMENTED,
-        })
+        test_setup_info.set(
+            {
+                'x_columns': file_obj.date_cols,
+                'y_columns': file_obj.num_cols,
+                'tests': od.OD_IMPLEMENTED,
+            }
+        )
 
         user_selected_tests.set(od_ui.ODTestSet())
         unemphasize_run_tests_button()
-
 
     # When a new file is selected on the test setup tab, this function is responsible
     # for clearing out anything that was there before and repopulating the page with
@@ -736,13 +690,11 @@ def server(input: Inputs, output: Outputs, session: Session):
 
         _initialize_test_ui(file_obj)
 
-
     # Uses data from initialize_test_ui to create ui elements
     @render.ui
     def test_setup_left():
         info = test_setup_info()
         return app_ui._test_setup_left(info)
-
 
     @reactive.effect
     @reactive.event(input.btn_test_move)
@@ -772,7 +724,6 @@ def server(input: Inputs, output: Outputs, session: Session):
                 util.show_warning(f'The {plain_name} requires a date column to be selected')
                 return
 
-
         tests = user_selected_tests()
         added = 0
         for test_key in selected_tests:
@@ -787,10 +738,7 @@ def server(input: Inputs, output: Outputs, session: Session):
                 valid_cols.extend(selected_y_cols)
 
             for test_col in valid_cols:
-                added += tests.add(
-                    test_key=test_key,
-                    test_col=test_col
-                )
+                added += tests.add(test_key=test_key, test_col=test_col)
 
         if added == 0:
             util.show_info('No additional tests were added (duplicates were filtered)')
@@ -799,8 +747,7 @@ def server(input: Inputs, output: Outputs, session: Session):
         if len(tests) > 0:
             emphasize_run_tests_button()
 
-        user_selected_tests.set(tests.copy()) # force ui update
-
+        user_selected_tests.set(tests.copy())  # force ui update
 
     @reactive.effect
     @reactive.event(input.accordion_trash_icon_clicked)
@@ -815,24 +762,19 @@ def server(input: Inputs, output: Outputs, session: Session):
 
         if len(tests) == 0:
             unemphasize_run_tests_button()
-        user_selected_tests.set(tests.copy()) # force ui update
-
+        user_selected_tests.set(tests.copy())  # force ui update
 
     @render.ui
     def test_setup_right():
         tests = user_selected_tests()
 
         # Set up accordion objects
-        right_ui = ui.panel_well(tests.get_ui(input))
-
-        return right_ui
-
+        return ui.panel_well(tests.get_ui(input))
 
     @reactive.effect
     @reactive.event(input.btn_test_help)
     def show_test_help_modal():
         ui.modal_show(app_ui.test_help_modal())
-
 
     async def update_button_class(id, rm, add):
         await session.send_custom_message(
@@ -841,9 +783,8 @@ def server(input: Inputs, output: Outputs, session: Session):
                 'id': id,
                 'rm': rm,
                 'add': add,
-            }
+            },
         )
-
 
     # This function is called while rendering a dataframe, therefore the client will
     # be forced to wait for the render to complete.
@@ -852,15 +793,13 @@ def server(input: Inputs, output: Outputs, session: Session):
             'update_column_label',
             {
                 'column_types': column_types,
-            }
+            },
         )
-
 
     # This function is called while rendering a dataframe, therefore the client will
     # be forced to wait for the render to complete.
     async def remove_export_header():
         await session.send_custom_message('remove_export_header', {})
-
 
     # This is used to force execution of reactive events that depend on the input file
     # selector.
@@ -870,7 +809,6 @@ def server(input: Inputs, output: Outputs, session: Session):
                 req(selected_file := input[sel_id]())
         ui.update_select(sel_id, selected='')
         ui.update_select(sel_id, selected=selected_file)
-
 
     def get_export_file_name():
         req(selected_file := input.sel_files_export())
@@ -884,17 +822,13 @@ def server(input: Inputs, output: Outputs, session: Session):
 
         return f'{util.remove_suffix(selected_file)}_screened{selected_ext}'
 
-
     @render.ui
     def show_download_button():
         fname = get_export_file_name()
         jlog(fname)
         return ui.download_button('download_data', fname, class_='btn-primary')
 
-
-    @render.download(
-        filename=get_export_file_name
-    )
+    @render.download(filename=get_export_file_name)
     async def download_data(chunk_size=8192):
         req(selected_file := input.sel_files_export())
         file_obj = user_state().get_file(selected_file)
@@ -921,20 +855,20 @@ def server(input: Inputs, output: Outputs, session: Session):
             if not chunk:
                 break
             yield chunk
-            await asyncio.sleep(0) # allow event loop to switch tasks
-
+            await asyncio.sleep(0)  # allow event loop to switch tasks
 
     #
     # Variables that rely on above functions:
     #
     od_task = reactive.ExtendedTask(run_od)
 
+    # Set up list of anonymous functions with reactive effects. These will be
+    # executed by the framework automatically.
     selectors = app_ui.get_file_selector_names()
-    fn_list = [ # list of anonymous functions with reactive effects
+    fn_list = [  # noqa: F841
         sync_selector(curr_selector, [s for s in selectors if s != curr_selector])
         for curr_selector in selectors
     ]
-
 
 
 app = App(app_ui.app_ui, server, debug=False)

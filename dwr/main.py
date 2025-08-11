@@ -2,7 +2,9 @@ from outlier_tool import app as src
 
 try:
     from datetime import datetime
+
     from pytz import timezone
+
     now_utc = datetime.now(timezone('UTC'))
     pacific_tz = timezone('US/Pacific')
     now_pacific = now_utc.astimezone(pacific_tz)

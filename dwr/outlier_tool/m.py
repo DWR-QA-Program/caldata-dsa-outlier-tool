@@ -3,6 +3,7 @@
 # readability at the expense of mild confusion upon first seeing it.
 #
 import os
+
 import shinyswatch
 
 #
@@ -83,3 +84,6 @@ WARN_FILE_SIZE_MB = int(WARN_FILE_SIZE_BYTES / 1_000_000)
 
 # Default option of file format selector
 NO_FF = 'None'
+
+# Minimum test duration - tests faster than this will be delayed for visual effect
+MIN_DUR = 0.2

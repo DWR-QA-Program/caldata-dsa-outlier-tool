@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 import pytest
-
 from outlier_tool import od
 
 
@@ -9,7 +8,7 @@ from outlier_tool import od
 def sample_submersible_sensor_data():
     np.random.seed(seed=42)
     time = pd.date_range(start='2025-01-01', periods=100, freq='D')
-    data = np.abs(np.random.randn(100)*5)
+    data = np.abs(np.random.randn(100) * 5)
     sample_data = pd.Series(data, index=time)
     sample_data = sample_data.drop(index=pd.Timestamp('2025-01-23 00:00:00'))
     sample_data[40:42] = np.nan
@@ -77,6 +76,7 @@ def test_tukey_iqr(sample_submersible_sensor_data):
     assert np.count_nonzero(output_ts) == 1
     with pytest.raises(ValueError, match='No input data.'):
         od.tukey_iqr_test(ts=pd.Series([]))
+
 
 def test_spike(sample_submersible_sensor_data):
     output_ts = od.spike_detection_test(ts=sample_submersible_sensor_data)

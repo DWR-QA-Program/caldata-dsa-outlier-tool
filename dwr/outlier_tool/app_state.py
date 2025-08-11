@@ -1,13 +1,13 @@
-import pandas as pd
-from shiny import ui
+import contextlib
 
-from . import m
-from . import util
-from . import upload_util
+import pandas as pd
+
+from . import m, upload_util
 from .schema import get_schema
 
+
 # Tracks the state of a user's session
-class State():
+class State:
     def __init__(self):
         self.files = {}
 
@@ -23,7 +23,7 @@ class State():
 
 
 # Stores data needed for using an uploaded file
-class File():
+class File:
     def __init__(self, name, df, selected_ff):
         self.name = name
         self.df = df
@@ -33,28 +33,26 @@ class File():
         self.last_selected_y_col = None
         self.od_results = {}
 
-
         # Match schema to file if possible
         if schema := get_schema(selected_ff):
             self.schema = schema
 
             if self.schema.columns:
                 # Update df column names with schema's column names if file had no header
-                if list(df.columns)[0] == 'col0':
+                if next(iter(df.columns)) == 'col0':
                     # This is only ever needed when a user has uploaded a file more than once,
                     # while toggling the header checkbox.
                     self.schema.reset_column_names()
 
                     self.df.rename(
-                        {src: trg.name for src, trg in zip(df.columns, schema.columns)},
+                        {src: trg.name for src, trg in zip(df.columns, schema.columns, strict=False)},
                         axis='columns',
                         inplace=True,
                     )
                 # Update schema column names to match what the file header is
                 else:
-                    for df_col, schema_col in zip(self.df.columns, self.schema.columns):
+                    for df_col, schema_col in zip(self.df.columns, self.schema.columns, strict=False):
                         schema_col.name = df_col
-
 
         self.empty_cols = upload_util.get_empty_cols(self.df)
         self.date_cols = upload_util.get_date_cols(self.df, self.empty_cols, self.schema)
@@ -72,32 +70,29 @@ class File():
                 print(e)
 
         # Remove date label from any supposed date columns that were not successfully converted
-        self.date_cols = [col for col in self.date_cols if pd.api.types.is_datetime64_any_dtype(self.df[col])]
+        self.date_cols = [
+            col for col in self.date_cols if pd.api.types.is_datetime64_any_dtype(self.df[col])
+        ]
 
-        if not self.date_cols:
-            if all((replaced_columns := upload_util.attempt_composite_date(self.df))):
-                self.composite_date_col = m.DATETIMECOL
-                self.date_cols.append(m.DATETIMECOL)
+        if not self.date_cols and (replaced_columns := upload_util.attempt_composite_date(self.df)):
+            self.composite_date_col = m.DATETIMECOL
+            self.date_cols.append(m.DATETIMECOL)
 
-                # Remove any numeric columns that contributed to the date since graphing
-                # them would just be graphing a component of the x axis.
-                for col in replaced_columns:
-                    try:
-                        self.num_cols.remove(col)
-                    except ValueError:
-                        pass
+            # Remove any numeric columns that contributed to the date since graphing
+            # them would just be graphing a component of the x axis.
+            for col in replaced_columns:
+                with contextlib.suppress(ValueError):
+                    self.num_cols.remove(col)
 
         # Ensure column names are unique - this is needed for the 'check' tab since the
         # render function only accepts unique column names.
         df = upload_util.deduplicate_columns(df)
-
 
     def save_od_result(self, test_name, test_col, result):
         results = self.od_results
         if test_name not in results:
             results[test_name] = {}
         results[test_name][test_col] = result
-
 
     def output_results_as_df(self):
         col_key = 'Column'
@@ -115,4 +110,4 @@ class File():
                 data[col_key].append(test_col)
                 data[test_key].append(test_name)
                 data[numf_key].append(self.od_results[test_name][test_col])
-        return pd.DataFrame(data).sort_values([col_key, test_key])#.fillna('N/A')
+        return pd.DataFrame(data).sort_values([col_key, test_key])

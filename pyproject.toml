@@ -22,6 +22,8 @@ openpyxl = "^3.1"
 seaborn = "^0.13.2"
 pytest = "^8.3.5"
 tsfresh = "^0.21.0"
+pre-commit = "^4.2.0"
+ruff = "^0.12.8"
 
 [tool.poetry.group.hostdev]
 optional = true
@@ -32,3 +34,60 @@ rsconnect-python = "^1.25"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 108
+respect-gitignore = true
+lint.select = [
+  "B", # flake8-bugbear
+  "C4", # comprehensions
+  "E", # pycodestyle
+  "F", # pyflakes
+  "I", # isort
+  "ISC", # flake8-implicit-str-concat
+  "PGH", # pygrep-hooks
+  "PLC", # pylint
+  "PLE", # pylint
+  "PLR", # pylint import style
+  "PLW", # pylint
+  "RET", # flake8-return
+  "RUF", # ruff-specific rules
+  "Q", # flake8-quotes
+  "SIM", # flake8-simplify
+  "T10", # flake8-debugger
+  "TID", # flake8-tidy-imports
+  "UP", # pyupgrade
+  "W", # pycodestyle
+  "YTT", # flake8-2020
+]
+lint.ignore = [
+  "D100", # public module
+  "D101", # public class
+  "D102", # public method
+  "D103", # public function
+  "D104", # public package
+  "D203", # blank line before docstring
+  "D212", # Start multi-line docstring at the second line.
+  "E501", # line length handled by black
+  "ISC001", # Handled by formatter
+  "PLR0913", # too many arguments
+  "PLR0912", # too many branches
+  "RET505", # no-else-return
+  "RET506", # no-else-raise
+  "RUF006", # force storing return values
+  "Q001", # multiline quotes
+]
+exclude = [
+    "dwr/*ipynb"
+]
+target-version = "py310"
+
+[tool.ruff.lint.per-file-ignores]
+"dwr/tests/*py" = ["PLR2004"] # magic numbers are fine in tests
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.ruff.lint.flake8-quotes]
+inline-quotes = "single"
+multiline-quotes = "single"

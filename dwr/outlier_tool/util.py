@@ -1,20 +1,15 @@
 # misc functions
-import os
 import html
-import dateutil
-import dateparser
-from pathlib import Path
 from functools import wraps
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from htmltools import TagChild
-from pandas.api.types import is_numeric_dtype
-
 import shiny
+from htmltools import TagChild
 from shiny import ui
 
-from .m import PASS, MULTIPLE_FAILURES
+from .m import MULTIPLE_FAILURES, PASS
 
 COLORS = {
     None: '\033[0m',
@@ -26,6 +21,7 @@ COLORS = {
     'cyan': '\033[36m',
 }
 
+
 # TODO: increase level as call stack grows in depth
 def print_func_name(color=None):
     def decorator(func):
@@ -34,6 +30,7 @@ def print_func_name(color=None):
             key = None if callable(color) else color
             jlog(f'{COLORS[key]}{func.__name__}\033[0m')
             return func(*args, **kwargs)
+
         return wrapper
 
     # Allow calling without parentheses
@@ -50,15 +47,18 @@ def catch_errors(func):
         except Exception as e:
             print(f'ERROR: {func.__name__}: {e}')
             return None
+
     return wrapper
 
 
 def jlog(msg='', level=0):
-    print(f'JLO: {chr(9)*level}{msg}')
+    print(f'JLO: {chr(9) * level}{msg}')
 
 
 def jlog1(msg=''):
     return jlog(msg, level=1)
+
+
 def jlog2(msg=''):
     return jlog(msg, level=2)
 
@@ -68,7 +68,7 @@ def jlog2(msg=''):
 # 2. Allow for outputting
 def req(variable, output_fn=print):
     if isinstance(variable, pd.DataFrame):
-        cond = not variable.empty # we don't pass empty dataframes through
+        cond = not variable.empty  # we don't pass empty dataframes through
     elif isinstance(variable, np.ndarray):
         cond = variable.any()
     else:
@@ -79,18 +79,28 @@ def req(variable, output_fn=print):
 
 def success(msg):
     return ui.p(msg, class_='text-success')
+
+
 def warning(msg):
     return ui.p(msg, class_='text-warning')
+
+
 def danger(msg):
     return ui.p(msg, class_='text-danger')
+
+
 def info(msg):
     return ui.p(msg, class_='text-info')
 
 
 def show_info(msg: TagChild, duration=3):
     ui.notification_show(msg, duration=duration, type='info')
+
+
 def show_warning(msg: TagChild, duration=3):
     ui.notification_show(msg, duration=duration, type='warning')
+
+
 def show_error(msg: TagChild, duration=3):
     ui.notification_show(msg, duration=duration, type='error')
 
@@ -138,7 +148,10 @@ def get_row_label(row: pd.Series, take_first=False) -> str:
 
 
 # Returns list of all failing tests for a given data point.
-def get_all_failures(row: pd.Series, renames={}) -> str:
+def get_all_failures(row: pd.Series, renames=None) -> str:
+    if renames is None:
+        renames = {}
+
     failures = row[row].index
     if failures.empty:
         return 'None'

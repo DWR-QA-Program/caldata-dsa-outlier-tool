@@ -1,5 +1,4 @@
 import pandas as pd
-
 from outlier_tool.upload_util import deduplicate_columns
 
 
@@ -38,6 +37,3 @@ class TestDedupeColumns:
         df = pd.DataFrame(data, columns=columns)
         df = deduplicate_columns(df)
         assert list(df.columns) == ['a', 'a_1', 'a_2', 'a_3', 'b', 'b_1', 'b_2']
-
-if __name__ == '__main__':
-    unittest.main()

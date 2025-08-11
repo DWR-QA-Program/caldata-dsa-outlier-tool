@@ -1,18 +1,16 @@
 # misc functions related to uploading files to the tool
-import dateutil
 import dateparser
-
+import dateutil
 import numpy as np
 import pandas as pd
 from htmltools import tags
 from pandas.api.types import is_numeric_dtype
-
 from shiny import ui
 
 from . import util
-from .util import to_html_list, jlog1, print_func_name
 from .m import DATETIMECOL
 from .schema import Schema, get_schema
+from .util import jlog1, print_func_name
 
 
 # This could support other delimiters
@@ -40,18 +38,20 @@ def get_empty_cols(df):
     return [col for col in df.columns if df[col].isnull().all()]
 
 
-def get_date_cols(df, empty, schema: Schema=None):
+def get_date_cols(df, empty, schema: Schema = None):
     ret = []
     for i, col in enumerate(df.columns):
         if col in empty:
             continue
 
         # Columns should be valid dates if any of the conditions are true:
-        if any((
-            'date' in col.lower(),
-            'time' in col.lower(),
-            schema is not None and len(schema.columns) > 0 and schema[i].is_datetime(),
-        )):
+        if any(
+            (
+                'date' in col.lower(),
+                'time' in col.lower(),
+                schema is not None and len(schema.columns) > 0 and schema[i].is_datetime(),
+            )
+        ):
             ret.append(col)
             continue
 
@@ -60,17 +60,21 @@ def get_date_cols(df, empty, schema: Schema=None):
     return ret
 
 
-def get_num_cols(df, empty, schema: Schema=None):
-    return [col for i, col in enumerate(df.columns) if all([
-        # Check if pandas notices that the column is numeric
-        is_numeric_dtype(df[col]),
-
-        # Check if the column isn't completely empty
-        col not in empty,
-
-        # Check if the column isn't manually labeled as non-numeric
-        schema is None or len(schema.columns) == 0 or schema[i].is_numeric()
-    ])]
+def get_num_cols(df, empty, schema: Schema = None):
+    return [
+        col
+        for i, col in enumerate(df.columns)
+        if all(
+            [
+                # Check if pandas notices that the column is numeric
+                is_numeric_dtype(df[col]),
+                # Check if the column isn't completely empty
+                col not in empty,
+                # Check if the column isn't manually labeled as non-numeric
+                schema is None or len(schema.columns) == 0 or schema[i].is_numeric(),
+            ]
+        )
+    ]
 
 
 def try_parse_date(value, strict=False):
@@ -79,8 +83,7 @@ def try_parse_date(value, strict=False):
 
     # Attempt #1
     try:
-        parsed = dateutil.parser.parse(value)
-        return parsed
+        return dateutil.parser.parse(value)
     except dateutil.parser._parser.ParserError:
         pass
 
@@ -108,37 +111,41 @@ def to_date(year: pd.Series, day_of_year: pd.Series, hour_and_minutes: pd.Series
 
     try:
         # Concatenate and convert
-        return pd.to_datetime(year+day_of_year+hour_and_minutes, format='%Y%j%H%M')
+        return pd.to_datetime(year + day_of_year + hour_and_minutes, format='%Y%j%H%M')
     except ValueError:
         return None
 
 
 def get_year_cols(df, thresh):
-    mask = ((df >= 1900) & (df <= 2100)).sum() >= thresh
+    year_lower_bound = 1900
+    year_upper_bound = 2100
+    mask = ((df >= year_lower_bound) & (df <= year_upper_bound)).sum() >= thresh
     mask &= df.apply(pd.api.types.is_integer_dtype)
     return df.columns[mask].to_list()
 
 
 def get_day_of_year_cols(df, thresh):
-    mask = ((df >= 0) & (df <= 366)).sum() >= thresh
+    last_day_of_year = 366
+    mask = ((df >= 0) & (df <= last_day_of_year)).sum() >= thresh
     mask &= df.apply(pd.api.types.is_integer_dtype)
     return df.columns[mask].to_list()
 
 
 def get_hour_cols(df, thresh):
-    mask = ((df >= 0) & (df <= 2300)).sum() >= thresh
+    last_hour_of_day = 2300
+    mask = ((df >= 0) & (df <= last_hour_of_day)).sum() >= thresh
     mask &= df.apply(pd.api.types.is_integer_dtype)
     return df.columns[mask].to_list()
 
 
 @print_func_name('yellow')
 def attempt_composite_date(df, sample_size=10) -> tuple[str | None, str | None, str | None]:
-    '''
+    """
     Looks through all columns of the input dataframe and attempts to construct a
     valid datetime column out of 3 columns. These columns must be in succession and
     consist of >= 90% values that respectively match a year, day of the month, and
     hour of the day.
-    
+
     This function operates "inplace" on the input DataFrame.
 
     Parameters
@@ -152,16 +159,16 @@ def attempt_composite_date(df, sample_size=10) -> tuple[str | None, str | None, 
     -------
     tuple
         Contains the names of the columns used to create a date column, or 3 Nones.
-    '''
+    """
     try:
         sample = df.sample(sample_size)
-    except ValueError: # too few rows
+    except ValueError:  # too few rows
         return None, None, None
 
     # We're only looking for columns that have been read in as integers really
     sample = sample.select_dtypes(exclude=['object'])
 
-    match_thresh = int(sample_size * .9)
+    match_thresh = int(sample_size * 0.9)
 
     cols_matching_year = get_year_cols(sample, match_thresh)
     cols_matching_day = get_day_of_year_cols(sample, match_thresh)
@@ -178,10 +185,10 @@ def attempt_composite_date(df, sample_size=10) -> tuple[str | None, str | None, 
     for potential_year_col in cols_matching_year:
         ycol_num = col_name_to_idx[potential_year_col]
         for potential_day_col in cols_matching_day:
-            if (dcol_num := col_name_to_idx[potential_day_col]) != ycol_num+1:
+            if (dcol_num := col_name_to_idx[potential_day_col]) != ycol_num + 1:
                 continue
             for potential_hour_col in cols_matching_hour:
-                if (hcol_num := col_name_to_idx[potential_hour_col]) != dcol_num+1:
+                if col_name_to_idx[potential_hour_col] != dcol_num + 1:
                     continue
                 matches.append((potential_year_col, potential_day_col, potential_hour_col))
                 jlog1(f'MATCH: {matches[-1]}')
@@ -197,13 +204,8 @@ def attempt_composite_date(df, sample_size=10) -> tuple[str | None, str | None, 
 
 def text_with_help(description, tooltip_text, leading_text=''):
     return ui.TagList(
-        ui.span(
-            ui.HTML(f'{leading_text}{description}&nbsp;')
-        ),
-        ui.tooltip(
-            ui.span('\u2139'),
-            tooltip_text
-        ),
+        ui.span(ui.HTML(f'{leading_text}{description}&nbsp;')),
+        ui.tooltip(ui.span('\u2139'), tooltip_text),
     )
 
 
@@ -221,33 +223,44 @@ def format_upload_error_msg(fname, exception):
 
 
 # Returns ui elements that show the status of a file upload+parse
-def format_upload_msg(fname,
-                      total_cols: int,
-                      num_date_cols: int,
-                      num_numeric_cols: int,
-                      composite_date_col=None,
-    ):
+def format_upload_msg(
+    fname,
+    total_cols: int,
+    num_date_cols: int,
+    num_numeric_cols: int,
+    composite_date_col=None,
+):
     elements = []
 
     if num_date_cols == 0 or num_numeric_cols == 0:
         elements.append(util.warning(ui.HTML(f'Loaded <code>{fname}</code>.')))
     else:
-        elements.append(util.success(ui.HTML(f'Loaded <code>{fname}</code> successfully.',)))
+        elements.append(
+            util.success(
+                ui.HTML(
+                    f'Loaded <code>{fname}</code> successfully.',
+                )
+            )
+        )
 
     other_cols = total_cols - num_date_cols - num_numeric_cols
 
     # Column counts
-    elements.extend([
-        ui.p(f'Found {total_cols} column{"s" if total_cols > 1 else ""}:'),
-        tags.ul(
-            tags.li(f'{num_date_cols} date column{"s" if num_date_cols > 1 else ""}'),
-            tags.li(f'{num_numeric_cols} numeric column{"s" if num_numeric_cols > 1 else ""}'),
-            tags.li(f'{other_cols} other column{"s" if other_cols > 1 else ""}'),
-        ),
-    ])
+    elements.extend(
+        [
+            ui.p(f'Found {total_cols} column{"s" if total_cols > 1 else ""}:'),
+            tags.ul(
+                tags.li(f'{num_date_cols} date column{"s" if num_date_cols > 1 else ""}'),
+                tags.li(f'{num_numeric_cols} numeric column{"s" if num_numeric_cols > 1 else ""}'),
+                tags.li(f'{other_cols} other column{"s" if other_cols > 1 else ""}'),
+            ),
+        ]
+    )
 
     if composite_date_col:
-        elements.append(util.info(f'"{composite_date_col}" was programmatically generated and added to the table.'))
+        elements.append(
+            util.info(f'"{composite_date_col}" was programmatically generated and added to the table.')
+        )
 
     # Add warning if there are missing columns
     missing_col_types = None
@@ -259,21 +272,25 @@ def format_upload_msg(fname,
         missing_col_types = 'numeric'
 
     if missing_col_types:
-        elements.append(util.warning(f'Tool will not be fully functional due to missing {missing_col_types} columns'))
+        elements.append(
+            util.warning(f'Tool will not be fully functional due to missing {missing_col_types} columns')
+        )
 
-    elements.extend([
-        ui.br(),
-        ui.p('We will delete this file once you close or refresh the application window.'),
-    ])
+    elements.extend(
+        [
+            ui.br(),
+            ui.p('We will delete this file once you close or refresh the application window.'),
+        ]
+    )
 
     return ui.panel_well(elements)
 
 
 def nullify_hyphens(df) -> tuple[list[str], list[str]]:
-    '''
+    """
     Cleans the input DataFrame by removing values that consist of only hyphen
     characters. Attempts to convert affected columns to a numeric type
-    
+
     This function operates "inplace" on the input DataFrame.
 
     Parameters
@@ -286,7 +303,7 @@ def nullify_hyphens(df) -> tuple[list[str], list[str]]:
     fixed, attempted
         fixed: list of columns that were cleaned and converted to numeric types
         attempted: list of columns cleaned of hyphens that remained non-numeric
-    '''
+    """
     fixed = []
     attempted = []
 
@@ -307,7 +324,7 @@ def nullify_hyphens(df) -> tuple[list[str], list[str]]:
 
 
 def deduplicate_columns(df: pd.DataFrame) -> pd.DataFrame:
-    '''
+    """
     Renames duplicate DataFrame column names by appending '_1', '_2', etc.
 
     Modifies the DataFrame in place and returns it.
@@ -317,16 +334,16 @@ def deduplicate_columns(df: pd.DataFrame) -> pd.DataFrame:
 
     Returns:
         pd.DataFrame: The DataFrame with deduplicated column names.
-    '''
+    """
     new_cols = []
 
     for col in df.columns:
-        original_col = str(col) # Our columns shouldn't be integers but this is for safety
+        original_col = str(col)  # Our columns shouldn't be integers but this is for safety
 
         # Handle the rare case where the input column collides with an existing column but
         # already follows the format we're outputting.
         if original_col in new_cols and '_' in original_col:
-            original_col = '_'.join(original_col.split('_')[:-1]) # strips "_1" or "_2", for example
+            original_col = '_'.join(original_col.split('_')[:-1])  # strips "_1" or "_2", for example
 
         current_col_name = original_col
         count = 0
