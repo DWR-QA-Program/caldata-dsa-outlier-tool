@@ -2,6 +2,7 @@ import asyncio
 import time
 from functools import partial
 from io import BytesIO, StringIO
+from time import sleep
 
 import numpy as np
 import pandas as pd
@@ -28,7 +29,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
     user_state = reactive.Value(app_state.State())
 
     # Container for dynamic upload feedback
-    upload_msg = reactive.Value()
+    upload_msg = reactive.Value() 
 
     # Dynamically-rendered dataframes
     results_df = reactive.Value(pd.DataFrame())
