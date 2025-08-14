@@ -7,4 +7,4 @@
 - `od.py`: outlier detection functions and related utility functions.
 - `schema.py`: classes and functions that enable data dictionary schema objects.
 - `upload_util.py`: utility functions specifically related to importing files into the tool.
-- `util.py`: common utility functions adn other things
+- `util.py`: common utility functions.
