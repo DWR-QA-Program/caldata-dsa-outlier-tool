@@ -1,0 +1,17 @@
+default_language_version:
+  python: python3.10
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.9
+    hooks:
+      # Run the linter, skipping .ipynb files
+      - id: ruff-check
+        types_or: [ python, pyi ]
+      # Run the formatter, skipping .ipynb files
+      - id: ruff-format
+        types_or: [ python, pyi ]
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.2.4
+    hooks:
+      - id: codespell
+        types_or: [markdown]
