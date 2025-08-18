@@ -1,27 +1,32 @@
-## Local Server Setup
+## Local server setup
 
-Your python environment manager will be assumed to be some flavor of Anaconda. Some additional info can be found [here](https://cagov.github.io/data-infrastructure/code/local-setup/#1-set-up-a-python-virtual-environment).
+### 1. Install uv
 
-### 1. Virtual environment setup
-1. Create a new environment (named `dwr`, for example) and get `poetry` set up:
-    ```bash
-    conda create -n dwr -c conda-forge python=3.10 poetry
-    ```
-    The following prompt will appear, "_The following NEW packages will be INSTALLED:_ "
-    You'll have the option to accept or reject by typing _y_ or _n_. Type _y_ to continue.
-2. Activate your virtual environment:
-    `conda activate dwr`
+This project uses `uv` for python package and virtual environment management. Installation instructions can be found [here](https://docs.astral.sh/uv/getting-started/installation/).
 
-### 2. Install Dependencies
+### 2. Install Python dependencies
 
-1. Make sure your current directory is the top-level project directory (i.e. the one with `pyproject.toml`)
+If you prefix your commands with uv run (e.g. `uv run shiny run main.py`), then uv will automatically make sure that the appropriate dependencies are installed before invoking the command.
 
-2. Install dependencies with poetry
-    ```bash
-    poetry install --with dev --no-root
-    ```
+However, if you want to explicitly ensure that all of the dependencies are installed in the virtual environment, run
+```bash
+uv sync
+```
+in the root of this repository.
 
-### 3. Running the tool
+Once the dependencies are installed, you can also "activate" the virtual environment by running
+```bash
+source .venv/bin/activate
+```
+from the repository root. With the environment activated, you no longer have to prefix commands with `uv run`.
+
+Which approach to take is largely a matter of personal preference:
+
+- Using the `uv run` prefix is more reliable, as dependencies are always resolved before executing.
+- Using `source .venv/bin/activate` involves less typing.
+
+
+### 3. Run the tool
 
 At this point, all project dependencies should be installed. Running the tool is as simple as executing 1 command from within the `dwr` directory:
 
