@@ -25,8 +25,14 @@ Which approach to take is largely a matter of personal preference:
 - Using the `uv run` prefix is more reliable, as dependencies are always resolved before executing.
 - Using `source .venv/bin/activate` involves less typing.
 
+### 3. Add Python dependencies
 
-### 3. Run the tool
+All the packages required to run the tool are listed under `project.dependencies` in the `pyproject.toml` file. To add another package to the `pyproject.toml` file, run:
+```bash
+uv add [package]
+```
+
+### 4. Run the tool
 
 At this point, all project dependencies should be installed. Running the tool is as simple as executing 1 command from within the `dwr` directory:
 
