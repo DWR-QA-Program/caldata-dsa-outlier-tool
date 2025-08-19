@@ -1,39 +1,39 @@
-[tool.poetry]
+[project]
 name = "caldata-dsa-dwr"
 version = "0.1.0"
 description = "CalData's DSA project with DWR"
-authors = ["Monica Bobra <monica.bobra@innovation.ca.gov>"]
+authors = [{ name = "Monica Bobra", email = "monica.bobra@innovation.ca.gov" }]
+requires-python = ">=3.10,<3.11"
 readme = "README.md"
-package-mode = false
+dependencies = [
+    "scikit-learn>=1.6.0,<2",
+    "pandas>=2.2.3,<3",
+    "numpy>=2.2.0,<3",
+    "matplotlib>=3.10.0,<4",
+    "jupyterlab>=4.3.3,<5",
+    "shiny~=1.2",
+    "shinyswatch>=0.8,<0.9",
+    "shinywidgets>=0.5,<0.6",
+    "plotly==5.24",
+    "dateparser~=1.2",
+    "openpyxl~=3.1",
+    "seaborn>=0.13.2,<0.14",
+    "pytest>=8.3.5,<9",
+    "tsfresh>=0.21.0,<0.22",
+    "pre-commit>=4.2.0,<5",
+    "ruff>=0.12.8,<0.13",
+]
 
-[tool.poetry.dependencies]
-python = "~3.10"
-scikit-learn = "^1.6.0"
-pandas = "^2.2.3"
-numpy = "^2.2.0"
-matplotlib = "^3.10.0"
-jupyterlab = "^4.3.3"
-shiny = "^1.2"
-shinyswatch = "^0.8"
-shinywidgets = "^0.5"
-plotly = "5.24"
-dateparser = "^1.2"
-openpyxl = "^3.1"
-seaborn = "^0.13.2"
-pytest = "^8.3.5"
-tsfresh = "^0.21.0"
-pre-commit = "^4.2.0"
-ruff = "^0.12.8"
+[dependency-groups]
+hostdev = ["rsconnect-python~=1.25"]
 
-[tool.poetry.group.hostdev]
-optional = true
-
-[tool.poetry.group.hostdev.dependencies]
-rsconnect-python = "^1.25"
+[tool.uv]
+package = false
+default-groups = ["hostdev"]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.ruff]
 line-length = 108
