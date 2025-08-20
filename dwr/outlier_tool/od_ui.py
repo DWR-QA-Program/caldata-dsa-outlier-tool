@@ -105,7 +105,9 @@ class ODTestSet:
             inputs = []
             if 'args' not in od.OD_IMPLEMENTED[test.test_key]:
                 inputs.append(ui.p('No additional arguments needed.'))
+                emoji = ui.tooltip('\u2705', 'No test configuration needed', placement='top')
             else:
+                emoji = ui.tooltip('\u25b6', 'Test configuration may be needed', placement='top')
                 for arg_id, arg_label, arg_type, default_value in od.OD_IMPLEMENTED[test.test_key]['args']:
                     # Create unique identifier of this argument so we can search for it later
                     input_id = f'{test.test_key}_{test.test_col.replace(" ", "_")}_{arg_id}'
@@ -129,18 +131,21 @@ class ODTestSet:
             # also uniquely identify accordion panels.
             value = str(hash(test))
 
-            plain_name = od.OD_IMPLEMENTED[test.test_key]['plain']
             col_widths = od.OD_IMPLEMENTED[test.test_key].get('col_widths', None)
-            title = f'{plain_name}: {test.test_col}'
+            plain_name = ui.strong(od.OD_IMPLEMENTED[test.test_key]['plain'])
+            title = ui.HTML(f'{plain_name}: {test.test_col}')
 
             accordions.append(
                 ui.accordion_panel(
                     title,
                     ui.layout_columns(*inputs, col_widths=col_widths),
                     icon=ui.tags.span(
-                        ui.HTML(trash_svg),
-                        class_='clickable-accordion-trash-icon',
-                        data_panel_value=value,  # this becomes data-panel-value in the browser
+                        ui.tags.span(
+                            ui.HTML(trash_svg),
+                            class_='clickable-accordion-trash-icon',
+                            data_panel_value=value,  # this becomes data-panel-value in the browser
+                        ),
+                        ui.tags.span(emoji),
                     ),
                     value=value,
                 )
