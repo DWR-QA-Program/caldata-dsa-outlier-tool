@@ -87,3 +87,6 @@ NO_FF = 'None'
 
 # Minimum test duration - tests faster than this will be delayed for visual effect
 MIN_DUR = 0.2
+
+# URL to use for tool's favicon
+FAVICON_URL = 'https://water.ca.gov/favicon.ico'

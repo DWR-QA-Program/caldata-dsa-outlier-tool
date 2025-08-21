@@ -206,6 +206,7 @@ app_ui = ui.page_sidebar(
         shinyswatch.theme_picker_ui(),
         open='closed',
     ),
+    ui.head_content(tags.link(rel='icon', href=m.FAVICON_URL, type='image/x-icon')),
     ui.navset_pill(
         ui.nav_panel(
             '1. Import',
