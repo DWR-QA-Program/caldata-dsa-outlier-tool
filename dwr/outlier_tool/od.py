@@ -182,7 +182,7 @@ def time_gap_test(ts: pd.Series, number: int, unit: str, delta=None) -> pd.Serie
 
     cadence = pd.Timedelta(number, unit) if delta is None else delta
 
-    output_ts = ts.diff() != cadence
+    output_ts = ts.diff() >= cadence
 
     # Since the first value has nothing to be compared to, it will always be True.
     # Manually set it to False to prevent confusion.
