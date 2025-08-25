@@ -1,18 +1,16 @@
 import asyncio
 import time
-from functools import partial
 from io import BytesIO, StringIO
 
 import numpy as np
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objs as go
 import shinyswatch
 from shiny import App, Inputs, Outputs, Session, reactive, render, ui
 from shiny.types import FileInfo, SilentException
 from shinywidgets import render_widget
 
-from . import app_state, app_ui, m, od, od_ui, schema, upload_util, util
+from . import app_state, app_ui, m, od, od_ui, plot, schema, upload_util, util
 from .util import jlog, jlog1, print_func_name
 
 
@@ -34,17 +32,11 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
     results_df = reactive.Value(pd.DataFrame())
     active_df = reactive.Value(pd.DataFrame())
 
-    # List of currently selected points on the graph.
-    selected_points = []
-
     # Values used to display dynamic content in the test setup page
     test_setup_info = reactive.Value({})  # left column: test setup options
     user_selected_tests = reactive.Value(od_ui.ODTestSet())  # right column: selected tests
 
-    # Lists of flagging operations, to support the undo/redo buttons.
-    # TODO: add undo size limit?
-    undo_stack = []
-    redo_stack = []
+    plot_state = plot.PlotState()
 
     async def run_od(test_list, file_obj: app_state.File):
         try:
@@ -411,64 +403,9 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
             req(False)  # returning None will wipe out the graph
 
         req(selected_file := input.sel_files_viz())
-        file_obj = user_state().get_file(selected_file)
-        schema = file_obj.schema
+        schema = user_state().get_file(selected_file).schema
 
-        jlog1(f'plot {x_col}/{y_col}')
-        jlog1(f'{df[x_col].dtype}')
-
-        px_kwargs = {}
-        renames = {}
-
-        if od_cols := od.get_od_names(df, y_col):
-            # Set arguments to let plotly know what column to use for markings
-            px_kwargs['color'] = px_kwargs['symbol'] = categ_name = m.OUTLIER_TYPE
-
-            # Create the column for controlling markings
-            df[categ_name] = df[od_cols].apply(util.get_row_label, axis=1)
-            px_kwargs['category_orders'] = {
-                categ_name: [m.PASS, *od_cols]  # keep 'pass' first
-            }
-
-            # Create column to show (on hover) what tests failed for a data point
-            renames = od.get_od_col_renames(od_cols)
-            df[m.FAILURES] = df[od_cols].apply(util.get_all_failures, axis=1, renames=renames)
-            px_kwargs['hover_data'] = [m.FAILURES]
-
-        jlog1(f'od_cols: {od_cols}')
-
-        # This will allow us to correlate selected data points with "df"
-        df[m.IDX] = df.index
-
-        # Add unit to y-axis label
-        if (
-            schema is not None
-            and (col_obj := schema.get(y_col, None)) is not None
-            and col_obj.units is not None
-        ):
-            px_kwargs['labels'] = {y_col: f'{y_col} ({col_obj.units})'}
-
-        # We need the graph as a widget so we can register callbacks.
-        fig = go.FigureWidget(px.scatter(df, x=x_col, y=y_col, custom_data=m.IDX, **px_kwargs))
-
-        # Set the "modebar" at the top right of the plot to always display, rather
-        # than only display on hover.
-        if not hasattr(fig, '_config') or fig._config is None:
-            fig._config = {}
-        fig._config['displayModeBar'] = True
-
-        # Rename outlier detection columns so they display nicely in the legend.
-        od.apply_renames(fig, renames)
-
-        # Set up callbacks for when data is selected
-        for i, trace in enumerate(fig.data):
-            trace.on_selection(partial(callback_data_selected, trace_num=i))
-
-        # Set up callback for when data is deselected - this only needs to happen
-        # for one of the traces.
-        fig.data[0].on_deselect(callback_clear_selection)
-
-        return fig
+        return plot.plot_data(df, x_col, y_col, schema, callback_data_selected, callback_clear_selection)
 
     # Note about callbacks: Plotly catches and completely ignores exceptions within
     # callback functions. We catch and print them to make debugging possible.
@@ -479,21 +416,21 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
     # parameter set up for us to map these values to the values in the original DataFrame.
     @util.catch_errors
     def callback_data_selected(trace, points, selector, trace_num: int) -> None:
-        nonlocal selected_points
-
         jlog1(f'trace #{trace_num}: {trace.legendgroup}')
 
         # The shape of customdata is a list of lists, each with 1 element. Get
         # that 1 element for selected indices.
         df_indices = trace.customdata[points.point_inds, 0]
 
-        selected_points = df_indices if trace_num == 0 else np.append(selected_points, df_indices)
+        if trace_num == 0:
+            plot_state.set_selected_points(df_indices)
+        else:
+            plot_state.append_selected_points(df_indices)
 
     # Prevent manual flagging buttons from doing anything when data is deselected
     @util.catch_errors
     def callback_clear_selection(trace, points) -> None:
-        nonlocal selected_points
-        selected_points = []
+        plot_state.reset_selected_points()
 
     def set_flags(indices: list, cols: list[str], value: bool | list[bool]) -> None:
         """
@@ -527,6 +464,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         active_df.set(dfcp)
 
     def manual_flag(value: bool) -> None:
+        selected_points = plot_state.get_selected_points()
         if len(selected_points) == 0:
             util.show_warning(
                 'No data points are selected. Use the box or lasso selector in the top right.'
@@ -555,12 +493,11 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         prev_values = df.loc[selected_points, target_cols].copy()
 
         # Save previous data to enable undos
-        undo_stack.append((selected_points, target_cols, prev_values, new_values))
+        plot_state.add_undo(selected_points, target_cols, prev_values, new_values)
         emphasize_undo_button()
 
         # Wipe out any possible redos
-        nonlocal redo_stack
-        redo_stack = []
+        plot_state.reset_redo()
         unemphasize_redo_button()
 
         set_flags(selected_points, target_cols, value)
@@ -595,14 +532,13 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
     @reactive.event(input.btn_undo_flag)
     def undo_flag():
         try:
-            sel, cols, prev, curr = undo_stack.pop()
+            sel, cols, prev = plot_state.undo()
         except IndexError:  # nothing to undo
             return
 
-        redo_stack.append((sel, cols, prev, curr))
         emphasize_redo_button()
 
-        if not undo_stack:
+        if plot_state.undo_stack_is_empty():
             unemphasize_undo_button()
 
         set_flags(sel, cols, prev)
@@ -611,28 +547,24 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
     @reactive.event(input.btn_redo_flag)
     def redo_flag():
         try:
-            sel, cols, prev, curr = redo_stack.pop()
+            sel, cols, curr = plot_state.redo()
         except IndexError:  # nothing to redo
             return
 
-        undo_stack.append((sel, cols, prev, curr))
         emphasize_undo_button()
 
-        if not redo_stack:
+        if plot_state.redo_stack_is_empty():
             unemphasize_redo_button()
 
         set_flags(sel, cols, curr)
 
     def reset_flag_stacks():
-        nonlocal redo_stack, undo_stack
-        undo_stack = []
-        redo_stack = []
+        plot_state.reset_stacks()
         unemphasize_undo_button()
         unemphasize_redo_button()
 
     def reset_graph_selection():
-        nonlocal selected_points
-        selected_points = []
+        plot_state.reset_selected_points()
 
     def reset_manual_flag_objects():
         reset_flag_stacks()
