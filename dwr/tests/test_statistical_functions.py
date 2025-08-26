@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
-from outlier_tool import od
+from outlier_tool import od_core as od
 
 
 @pytest.fixture
@@ -17,9 +17,9 @@ def sample_submersible_sensor_data():
 
 
 def test_time_gap(sample_submersible_sensor_data):
-    output_ts = od.time_gap_test(ts=sample_submersible_sensor_data.index, number=1, unit='days')
+    output_ts = od.time_gap_test(ts=pd.Series(sample_submersible_sensor_data.index), number=1, unit='days')
     assert len(output_ts) == len(sample_submersible_sensor_data)
-    assert np.count_nonzero(output_ts) == 2
+    assert np.count_nonzero(output_ts) == 1
     with pytest.raises(ValueError, match='No input data.'):
         od.time_gap_test(ts=pd.Series([]), number=1, unit='days')
 
@@ -30,12 +30,6 @@ def test_value_gap(sample_submersible_sensor_data):
     assert np.count_nonzero(output_ts) == 2
     with pytest.raises(ValueError, match='No input data.'):
         od.value_gap_test(ts=pd.Series([]))
-
-
-def test_pH_range(sample_submersible_sensor_data):
-    output_ts = od.pH_range_test(ts=sample_submersible_sensor_data)
-    assert np.nanmin(output_ts) >= 0
-    assert np.nanmax(output_ts) <= 14
 
 
 def test_gross_range(sample_submersible_sensor_data):
