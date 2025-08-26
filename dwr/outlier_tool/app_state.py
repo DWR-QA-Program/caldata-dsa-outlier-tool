@@ -1,8 +1,6 @@
-import contextlib
-
 import pandas as pd
 
-from . import m, upload_util
+from . import upload_util
 from .schema import get_schema
 
 
@@ -73,16 +71,6 @@ class File:
         self.date_cols = [
             col for col in self.date_cols if pd.api.types.is_datetime64_any_dtype(self.df[col])
         ]
-
-        if not self.date_cols and (replaced_columns := upload_util.attempt_composite_date(self.df)):
-            self.composite_date_col = m.DATETIMECOL
-            self.date_cols.append(m.DATETIMECOL)
-
-            # Remove any numeric columns that contributed to the date since graphing
-            # them would just be graphing a component of the x axis.
-            for col in replaced_columns:
-                with contextlib.suppress(ValueError):
-                    self.num_cols.remove(col)
 
         # Ensure column names are unique - this is needed for the 'check' tab since the
         # render function only accepts unique column names.

@@ -80,86 +80,17 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
     @reactive.effect
     @print_func_name
     def read_file():
-        file: list[FileInfo] | None = input.file1()
-        req(file)
-
-        fpath = file[0]['datapath']  # file path internal to browser, only used here
-        fname = file[0]['name']  # file name used as unique key, used in many functions
-        fsize = util.get_file_size(fpath)
-        fsize_mb = round(fsize / 1_000_000, 1)
-
-        if fsize > m.MAX_FILE_SIZE_BYTES:
-            util.show_error(
-                f'File size ({fsize_mb} MB) exceeds maximum of {m.MAX_FILE_SIZE_MB} MB',
-                duration=None,
-            )
-            return
-        elif fsize > m.WARN_FILE_SIZE_BYTES:
-            util.show_warning(
-                f'File sizes greater than {m.WARN_FILE_SIZE_MB} MB may cause performance issues.'
-            )
-            progress = ui.Progress(0, 3)  # this needs to be closed before the function completes
-        else:
-            progress = None
-
-        # Read all upload settings
-        with reactive.isolate():
-            read_kwargs = {}
-            selected_ff = input.sel_file_format()
-
-            if not input.checkbox_data_has_header():
-                read_kwargs['header'] = None
-
-            if input.checkbox_skip_n_rows():
-                read_kwargs['skiprows'] = input.input_skip_n_rows()
-
-        # Load file
-        try:
-            util.cond_progress(progress, 0, 'Reading file into python')
-            df = upload_util.read_file(fpath, selected_ff, read_kwargs)
-        except Exception as e:
-            upload_msg.set(upload_util.format_upload_error_msg(fname, exception=e))
-            util.cond_progress_close(progress)
-            return
-
-        msg_kw = {}
-
-        # Register file with internal systems
-        util.cond_progress(progress, 1, 'Setting up tool internals')
-        state = user_state()
-        file_obj = state.add_file(fname, df, selected_ff)
-        msg_kw['total_cols'] = len(file_obj.df.columns)
-        msg_kw['num_date_cols'] = len(file_obj.date_cols)
-        msg_kw['num_numeric_cols'] = len(file_obj.num_cols)
-        msg_kw['composite_date_col'] = file_obj.composite_date_col
-
-        # Make file available on all relevant tabs
-        util.cond_progress(progress, 2, 'Refreshing tool state')
-        ui.update_select('sel_files_check', choices=state.get_filenames())
-        ui.update_select('sel_files_test', choices=state.get_filenames())
-        ui.update_select('sel_files_viz', choices=state.get_filenames())
-        ui.update_select('sel_files_export', choices=state.get_filenames())
-
-        # Update selectors to the most recently uploaded file - we only need to update one
-        # and the rest will sync with it.
-        ui.update_select('sel_files_check', selected=fname)
-
-        # If a user uploads a file more than one time, toggling the header button between
-        # uploads, the resulting data may have different column names. If so, we need to
-        # make sure to refresh a few tabs so that they don't display the previous column names.
-        with reactive.isolate():
-            # Refresh test ui in test tab
-            if input.sel_files_test() == fname:
-                _initialize_test_ui(file_obj)
-
-            # Refresh column names in review tab
-            if input.sel_files_viz() == fname:
-                _update_x_and_y_cols(file_obj)
-
-        upload_msg.set(upload_util.format_upload_msg(fname, **msg_kw))
-
-        util.cond_progress_close(progress)
-        jlog1('read_file exit')
+        file_info: list[FileInfo] | None = input.file1()
+        req(file_info)
+        if msg := upload_util.read_file(
+            input,
+            file_info,
+            user_state,
+            invalidate_file_selector,
+            _initialize_test_ui,
+            _update_x_and_y_cols,
+        ):
+            upload_msg.set(msg)
 
     # When the user selects a file, they generally expect to see the same selected file on
     # all navigation tabs. We keep all file selectors in sync here to meet this expectation.
