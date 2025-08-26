@@ -145,31 +145,31 @@ def time_gap_test_auto(ts: pd.Series) -> pd.Series:
 
 def time_gap_test(ts: pd.Series, number: int, unit: str, delta=None) -> pd.Series:
     """
-        Apply a time gap test. This test identifies data points separated
-        by a time period greater than the provided cadence.
+    Apply a time gap test. This test identifies data points separated
+    by a time period greater than the provided cadence.
 
-        Parameters
-        ----------
-        ts : pd.Series
-            A pandas series with a datetime data type.
+    Parameters
+    ----------
+    ts : pd.Series
+        A pandas series with a datetime data type.
 
-        number : int
-            number of (ex: days, hours, etc) to define the expected cadence of the data.
+    number : int
+        number of (ex: days, hours, etc) to define the expected cadence of the data.
 
-        unit : str
-            Type of time unit to measure (ex: days, hours). pandas.Timedelta must support this.
+    unit : str
+        Type of time unit to measure (ex: days, hours). pandas.Timedelta must support this.
 
-        delta : pd.Timedelta
-            Optional argument that overrides the "number" and "unit" arguments.
+    delta : pd.Timedelta
+        Optional argument that overrides the "number" and "unit" arguments.
 
-        Returns
-        -------
-        pd.Series
-            A boolean series with the same index as time_series.
+    Returns
+    -------
+    pd.Series
+        A boolean series with the same index as time_series.
 
-        Examples
-        --------
-        >>> df['failed_test'] = time_gap_test(df['test_column'], number=1, unit='days'))
+    Examples
+    --------
+    >>> df['failed_test'] = time_gap_test(df['test_column'], number=1, unit='days'))
 
     """
     if ts.empty:
