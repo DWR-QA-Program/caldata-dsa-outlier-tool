@@ -4,9 +4,13 @@
 #       Due to this, changing the names of these functions arguments also requires
 #       changing values in the OD_IMPLEMENTED dictionary.
 
-import pandas as pd
+import asyncio
+import time
 
-from . import app_state, od_core
+import pandas as pd
+from shiny import ui
+
+from . import app_state, m, od_core
 from .m import _F, MANUAL, MULTIPLE_FAILURES, PASS
 
 OD_IMPLEMENTED = {
@@ -162,3 +166,34 @@ def get_default_tests(file: app_state.File):
 
 def time_gap_test_auto(ts: pd.Series) -> pd.Series:
     return od_core.time_gap_test(ts, None, None, ts.diff().median())
+
+
+async def run_od(test_list, file_obj: app_state.File):
+    n_tests = len(test_list)
+    df = file_obj.df
+
+    with ui.Progress(min=0, max=n_tests) as p:
+        for i, (test_fn, test_col, kwargs) in enumerate(test_list):
+            test_name = test_fn.__name__
+
+            msg = f'({i + 1}/{n_tests})'
+            p.set(i, message=msg, detail=f'{test_name}')
+
+            new_col_name = get_od_name(test_name, test_col)
+
+            start_time = time.perf_counter()
+            try:
+                df[new_col_name] = test_fn(df[test_col], **kwargs)
+            except Exception as e:
+                result = repr(e)
+            else:
+                result = df[new_col_name].sum()
+
+            file_obj.save_od_result(test_name, test_col, result)
+
+            # When tests execute quickly, add a delay so that the progress bar is visible
+            sleep_duration = m.MIN_DUR if time.perf_counter() - start_time < m.MIN_DUR else 0
+
+            # Free up the event loop to switch tasks so that the UI can respond
+            # to events while tests are running.
+            await asyncio.sleep(sleep_duration)

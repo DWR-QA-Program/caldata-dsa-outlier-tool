@@ -1,5 +1,4 @@
 import asyncio
-import time
 from io import BytesIO, StringIO
 
 import numpy as np
@@ -40,40 +39,8 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
     async def run_od(test_list, file_obj: app_state.File):
         try:
-            jlog('run_od')
-            n_tests = len(test_list)
-            df = file_obj.df
-
-            with ui.Progress(min=0, max=n_tests) as p:
-                for i, (test_fn, test_col, kwargs) in enumerate(test_list):
-                    test_name = test_fn.__name__
-
-                    msg = f'({i + 1}/{n_tests})'
-                    p.set(i, message=msg, detail=f'{test_name}')
-
-                    jlog1(f'{test_fn.__name__}: {test_col}')
-
-                    new_col_name = od.get_od_name(test_name, test_col)
-
-                    start_time = time.perf_counter()
-                    try:
-                        df[new_col_name] = test_fn(df[test_col], **kwargs)
-                    except Exception as e:
-                        result = repr(e)
-                    else:
-                        result = df[new_col_name].sum()
-
-                    file_obj.save_od_result(test_name, test_col, result)
-
-                    # When tests execute quickly, add a delay so that the progress bar is visible
-                    sleep_duration = m.MIN_DUR if time.perf_counter() - start_time < m.MIN_DUR else 0
-
-                    # Free up the event loop to switch tasks so that the UI can respond
-                    # to events while tests are running.
-                    await asyncio.sleep(sleep_duration)
-
+            await od.run_od(test_list, file_obj)
             refresh_od_results_manual(file_obj)
-
         except Exception as e:
             util.show_error(f'Internal error: {e}', duration=5)
 
