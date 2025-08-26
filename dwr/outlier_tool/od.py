@@ -145,32 +145,31 @@ def time_gap_test_auto(ts: pd.Series) -> pd.Series:
 
 def time_gap_test(ts: pd.Series, number: int, unit: str, delta=None) -> pd.Series:
     """
-        Apply a time gap test. Any gap between data points, either larger or smaller than
-    the provided cadence, will be flagged as invalid.  Specifically, the value that
-    *follows* a gap will be flagged as failing this test.
+    Apply a time gap test. This test identifies data points separated
+    by a time period greater than the provided cadence.
 
-        Parameters
-        ----------
-        ts : pd.Series
-            A pandas series with a datetime data type.
+    Parameters
+    ----------
+    ts : pd.Series
+        A pandas series with a datetime data type.
 
-        number : int
-            number of (ex: days, hours, etc) to define the expected cadence of the data.
+    number : int
+        number of (ex: days, hours, etc) to define the expected cadence of the data.
 
-        unit : str
-            Type of time unit to measure (ex: days, hours). pandas.Timedelta must support this.
+    unit : str
+        Type of time unit to measure (ex: days, hours). pandas.Timedelta must support this.
 
-        delta : pd.Timedelta
-            Optional argument that overrides the "number" and "unit" arguments.
+    delta : pd.Timedelta
+        Optional argument that overrides the "number" and "unit" arguments.
 
-        Returns
-        -------
-        pd.Series
-            A boolean series with the same index as time_series.
+    Returns
+    -------
+    pd.Series
+        A boolean series with the same index as time_series.
 
-        Examples
-        --------
-        >>> df['failed_test'] = time_gap_test(df['test_column'], number=1, unit='days'))
+    Examples
+    --------
+    >>> df['failed_test'] = time_gap_test(df['test_column'], number=1, unit='days'))
 
     """
     if ts.empty:
@@ -182,7 +181,7 @@ def time_gap_test(ts: pd.Series, number: int, unit: str, delta=None) -> pd.Serie
 
     cadence = pd.Timedelta(number, unit) if delta is None else delta
 
-    output_ts = ts.diff() != cadence
+    output_ts = ts.diff() > cadence
 
     # Since the first value has nothing to be compared to, it will always be True.
     # Manually set it to False to prevent confusion.
