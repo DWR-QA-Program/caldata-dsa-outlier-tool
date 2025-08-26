@@ -116,7 +116,7 @@ def test_help_modal():
                 'Time gap test',
                 ui.div(
                     ui.p(
-                        'The time gap test evaluates a date column for gaps in its expected cadence. A cadence is a number of days, hours, or minutes.'
+                        'The time gap test evaluates a date column for gaps in its expected cadence. A cadence is a repeating sequence on the order of days, hours, or minutes.'
                     ),
                 ),
             ),
