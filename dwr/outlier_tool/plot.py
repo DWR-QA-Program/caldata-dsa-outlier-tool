@@ -113,6 +113,7 @@ def plot_data(
     if not hasattr(fig, '_config') or fig._config is None:
         fig._config = {}
     fig._config['displayModeBar'] = True
+    fig._config['scrollZoom'] = True
 
     # Rename outlier detection columns so they display nicely in the legend.
     od.apply_renames(fig, renames)
