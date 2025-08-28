@@ -5,7 +5,7 @@ from typing import Any
 
 from shiny import Inputs, reactive, ui
 
-from . import od
+from . import od, od_core
 from .app_ui import trash_svg
 
 
@@ -120,7 +120,7 @@ class ODTestSet:
                         inputs.append(ui.input_numeric(input_id, f'{arg_label}:', existing_value))
                     elif arg_type == 'date_unit':
                         inputs.append(
-                            ui.input_select(input_id, arg_label, od.DATE_STRS, selected=existing_value)
+                            ui.input_select(input_id, arg_label, od_core.DATE_STRS, selected=existing_value)
                         )
 
                     # Save information needed to correlate an argument in the browser

@@ -274,7 +274,7 @@ app_ui = ui.page_sidebar(
             ui.output_data_frame('check_table'),
         ),
         ui.nav_panel(
-            '3. Test Data',
+            '3. Test data',
             ui.row(
                 ui.column(
                     6,
@@ -339,7 +339,7 @@ app_ui = ui.page_sidebar(
             ),
         ),
         ui.nav_panel(
-            '4. Review Outliers',
+            '4. Review outliers',
             tags.h4('Review and flag outliers', class_='tab-title'),
             ui.row(
                 ui.column(

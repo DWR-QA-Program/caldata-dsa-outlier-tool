@@ -1,18 +1,15 @@
 import asyncio
-import time
-from functools import partial
 from io import BytesIO, StringIO
 
 import numpy as np
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objs as go
 import shinyswatch
 from shiny import App, Inputs, Outputs, Session, reactive, render, ui
 from shiny.types import FileInfo, SilentException
 from shinywidgets import render_widget
 
-from . import app_state, app_ui, m, od, od_ui, schema, upload_util, util
+from . import app_state, app_ui, m, od, od_ui, plot, schema, upload_util, util
 from .util import jlog, jlog1, print_func_name
 
 
@@ -34,140 +31,33 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
     results_df = reactive.Value(pd.DataFrame())
     active_df = reactive.Value(pd.DataFrame())
 
-    # List of currently selected points on the graph.
-    selected_points = []
-
     # Values used to display dynamic content in the test setup page
     test_setup_info = reactive.Value({})  # left column: test setup options
     user_selected_tests = reactive.Value(od_ui.ODTestSet())  # right column: selected tests
 
-    # Lists of flagging operations, to support the undo/redo buttons.
-    # TODO: add undo size limit?
-    undo_stack = []
-    redo_stack = []
+    plot_state = plot.PlotState()
 
     async def run_od(test_list, file_obj: app_state.File):
         try:
-            jlog('run_od')
-            n_tests = len(test_list)
-            df = file_obj.df
-
-            with ui.Progress(min=0, max=n_tests) as p:
-                for i, (test_fn, test_col, kwargs) in enumerate(test_list):
-                    test_name = test_fn.__name__
-
-                    msg = f'({i + 1}/{n_tests})'
-                    p.set(i, message=msg, detail=f'{test_name}')
-
-                    jlog1(f'{test_fn.__name__}: {test_col}')
-
-                    new_col_name = od.get_od_name(test_name, test_col)
-
-                    start_time = time.perf_counter()
-                    try:
-                        df[new_col_name] = test_fn(df[test_col], **kwargs)
-                    except Exception as e:
-                        result = repr(e)
-                    else:
-                        result = df[new_col_name].sum()
-
-                    file_obj.save_od_result(test_name, test_col, result)
-
-                    # When tests execute quickly, add a delay so that the progress bar is visible
-                    sleep_duration = m.MIN_DUR if time.perf_counter() - start_time < m.MIN_DUR else 0
-
-                    # Free up the event loop to switch tasks so that the UI can respond
-                    # to events while tests are running.
-                    await asyncio.sleep(sleep_duration)
-
+            await od.run_od(test_list, file_obj)
             refresh_od_results_manual(file_obj)
-
         except Exception as e:
             util.show_error(f'Internal error: {e}', duration=5)
 
     @reactive.effect
     @print_func_name
     def read_file():
-        file: list[FileInfo] | None = input.file1()
-        req(file)
-
-        fpath = file[0]['datapath']  # file path internal to browser, only used here
-        fname = file[0]['name']  # file name used as unique key, used in many functions
-        fsize = util.get_file_size(fpath)
-        fsize_mb = round(fsize / 1_000_000, 1)
-
-        if fsize > m.MAX_FILE_SIZE_BYTES:
-            util.show_error(
-                f'File size ({fsize_mb} MB) exceeds maximum of {m.MAX_FILE_SIZE_MB} MB',
-                duration=None,
-            )
-            return
-        elif fsize > m.WARN_FILE_SIZE_BYTES:
-            util.show_warning(
-                f'File sizes greater than {m.WARN_FILE_SIZE_MB} MB may cause performance issues.'
-            )
-            progress = ui.Progress(0, 3)  # this needs to be closed before the function completes
-        else:
-            progress = None
-
-        # Read all upload settings
-        with reactive.isolate():
-            read_kwargs = {}
-            selected_ff = input.sel_file_format()
-
-            if not input.checkbox_data_has_header():
-                read_kwargs['header'] = None
-
-            if input.checkbox_skip_n_rows():
-                read_kwargs['skiprows'] = input.input_skip_n_rows()
-
-        # Load file
-        try:
-            util.cond_progress(progress, 0, 'Reading file into python')
-            df = upload_util.read_file(fpath, selected_ff, read_kwargs)
-        except Exception as e:
-            upload_msg.set(upload_util.format_upload_error_msg(fname, exception=e))
-            util.cond_progress_close(progress)
-            return
-
-        msg_kw = {}
-
-        # Register file with internal systems
-        util.cond_progress(progress, 1, 'Setting up tool internals')
-        state = user_state()
-        file_obj = state.add_file(fname, df, selected_ff)
-        msg_kw['total_cols'] = len(file_obj.df.columns)
-        msg_kw['num_date_cols'] = len(file_obj.date_cols)
-        msg_kw['num_numeric_cols'] = len(file_obj.num_cols)
-        msg_kw['composite_date_col'] = file_obj.composite_date_col
-
-        # Make file available on all relevant tabs
-        util.cond_progress(progress, 2, 'Refreshing tool state')
-        ui.update_select('sel_files_check', choices=state.get_filenames())
-        ui.update_select('sel_files_test', choices=state.get_filenames())
-        ui.update_select('sel_files_viz', choices=state.get_filenames())
-        ui.update_select('sel_files_export', choices=state.get_filenames())
-
-        # Update selectors to the most recently uploaded file - we only need to update one
-        # and the rest will sync with it.
-        ui.update_select('sel_files_check', selected=fname)
-
-        # If a user uploads a file more than one time, toggling the header button between
-        # uploads, the resulting data may have different column names. If so, we need to
-        # make sure to refresh a few tabs so that they don't display the previous column names.
-        with reactive.isolate():
-            # Refresh test ui in test tab
-            if input.sel_files_test() == fname:
-                _initialize_test_ui(file_obj)
-
-            # Refresh column names in review tab
-            if input.sel_files_viz() == fname:
-                _update_x_and_y_cols(file_obj)
-
-        upload_msg.set(upload_util.format_upload_msg(fname, **msg_kw))
-
-        util.cond_progress_close(progress)
-        jlog1('read_file exit')
+        file_info: list[FileInfo] | None = input.file1()
+        req(file_info)
+        if msg := upload_util.read_file(
+            input,
+            file_info,
+            user_state,
+            invalidate_file_selector,
+            _initialize_test_ui,
+            _update_x_and_y_cols,
+        ):
+            upload_msg.set(msg)
 
     # When the user selects a file, they generally expect to see the same selected file on
     # all navigation tabs. We keep all file selectors in sync here to meet this expectation.
@@ -411,89 +301,9 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
             req(False)  # returning None will wipe out the graph
 
         req(selected_file := input.sel_files_viz())
-        file_obj = user_state().get_file(selected_file)
-        schema = file_obj.schema
+        schema = user_state().get_file(selected_file).schema
 
-        jlog1(f'plot {x_col}/{y_col}')
-        jlog1(f'{df[x_col].dtype}')
-
-        px_kwargs = {}
-        renames = {}
-
-        if od_cols := od.get_od_names(df, y_col):
-            # Set arguments to let plotly know what column to use for markings
-            px_kwargs['color'] = px_kwargs['symbol'] = categ_name = m.OUTLIER_TYPE
-
-            # Create the column for controlling markings
-            df[categ_name] = df[od_cols].apply(util.get_row_label, axis=1)
-            px_kwargs['category_orders'] = {
-                categ_name: [m.PASS, *od_cols]  # keep 'pass' first
-            }
-
-            # Create column to show (on hover) what tests failed for a data point
-            renames = od.get_od_col_renames(od_cols)
-            df[m.FAILURES] = df[od_cols].apply(util.get_all_failures, axis=1, renames=renames)
-            px_kwargs['hover_data'] = [m.FAILURES]
-
-        jlog1(f'od_cols: {od_cols}')
-
-        # This will allow us to correlate selected data points with "df"
-        df[m.IDX] = df.index
-
-        # Add unit to y-axis label
-        if (
-            schema is not None
-            and (col_obj := schema.get(y_col, None)) is not None
-            and col_obj.units is not None
-        ):
-            px_kwargs['labels'] = {y_col: f'{y_col} ({col_obj.units})'}
-
-        # We need the graph as a widget so we can register callbacks.
-        fig = go.FigureWidget(px.scatter(df, x=x_col, y=y_col, custom_data=m.IDX, **px_kwargs))
-
-        # Set the "modebar" at the top right of the plot to always display, rather
-        # than only display on hover.
-        if not hasattr(fig, '_config') or fig._config is None:
-            fig._config = {}
-        fig._config['displayModeBar'] = True
-
-        # Rename outlier detection columns so they display nicely in the legend.
-        od.apply_renames(fig, renames)
-
-        # Set up callbacks for when data is selected
-        for i, trace in enumerate(fig.data):
-            trace.on_selection(partial(callback_data_selected, trace_num=i))
-
-        # Set up callback for when data is deselected - this only needs to happen
-        # for one of the traces.
-        fig.data[0].on_deselect(callback_clear_selection)
-
-        return fig
-
-    # Note about callbacks: Plotly catches and completely ignores exceptions within
-    # callback functions. We catch and print them to make debugging possible.
-
-    # This is executed on each trace in the graph (i.e. each set of labeled points,
-    # like "pass", "test1", "test2", etc). Each trace has a 0-indexed list of indices -
-    # these are the points on the graph that have been selected. We use the customdata
-    # parameter set up for us to map these values to the values in the original DataFrame.
-    @util.catch_errors
-    def callback_data_selected(trace, points, selector, trace_num: int) -> None:
-        nonlocal selected_points
-
-        jlog1(f'trace #{trace_num}: {trace.legendgroup}')
-
-        # The shape of customdata is a list of lists, each with 1 element. Get
-        # that 1 element for selected indices.
-        df_indices = trace.customdata[points.point_inds, 0]
-
-        selected_points = df_indices if trace_num == 0 else np.append(selected_points, df_indices)
-
-    # Prevent manual flagging buttons from doing anything when data is deselected
-    @util.catch_errors
-    def callback_clear_selection(trace, points) -> None:
-        nonlocal selected_points
-        selected_points = []
+        return plot.plot_data(df, x_col, y_col, schema, plot_state)
 
     def set_flags(indices: list, cols: list[str], value: bool | list[bool]) -> None:
         """
@@ -527,6 +337,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         active_df.set(dfcp)
 
     def manual_flag(value: bool) -> None:
+        selected_points = plot_state.get_selected_points()
         if len(selected_points) == 0:
             util.show_warning(
                 'No data points are selected. Use the box or lasso selector in the top right.'
@@ -555,12 +366,11 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         prev_values = df.loc[selected_points, target_cols].copy()
 
         # Save previous data to enable undos
-        undo_stack.append((selected_points, target_cols, prev_values, new_values))
+        plot_state.add_undo(selected_points, target_cols, prev_values, new_values)
         emphasize_undo_button()
 
         # Wipe out any possible redos
-        nonlocal redo_stack
-        redo_stack = []
+        plot_state.reset_redo()
         unemphasize_redo_button()
 
         set_flags(selected_points, target_cols, value)
@@ -595,14 +405,13 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
     @reactive.event(input.btn_undo_flag)
     def undo_flag():
         try:
-            sel, cols, prev, curr = undo_stack.pop()
+            sel, cols, prev = plot_state.undo()
         except IndexError:  # nothing to undo
             return
 
-        redo_stack.append((sel, cols, prev, curr))
         emphasize_redo_button()
 
-        if not undo_stack:
+        if plot_state.undo_stack_is_empty():
             unemphasize_undo_button()
 
         set_flags(sel, cols, prev)
@@ -611,28 +420,24 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
     @reactive.event(input.btn_redo_flag)
     def redo_flag():
         try:
-            sel, cols, prev, curr = redo_stack.pop()
+            sel, cols, curr = plot_state.redo()
         except IndexError:  # nothing to redo
             return
 
-        undo_stack.append((sel, cols, prev, curr))
         emphasize_undo_button()
 
-        if not redo_stack:
+        if plot_state.redo_stack_is_empty():
             unemphasize_redo_button()
 
         set_flags(sel, cols, curr)
 
     def reset_flag_stacks():
-        nonlocal redo_stack, undo_stack
-        undo_stack = []
-        redo_stack = []
+        plot_state.reset_stacks()
         unemphasize_undo_button()
         unemphasize_redo_button()
 
     def reset_graph_selection():
-        nonlocal selected_points
-        selected_points = []
+        plot_state.reset_selected_points()
 
     def reset_manual_flag_objects():
         reset_flag_stacks()
@@ -644,11 +449,12 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         reset_manual_flag_objects()
 
     @reactive.effect
-    def react_to_new_screen_cols():
+    def react_to_new_plot_cols():
         sel_x = input.sel_x()
         sel_y = input.sel_y()
         req(sel_x or sel_y)
         reset_manual_flag_objects()
+        plot_state.reset_zoom()
 
     def emphasize_undo_button():
         asyncio.create_task(update_button_class('btn_undo_flag', 'btn-light', 'btn-warning'))

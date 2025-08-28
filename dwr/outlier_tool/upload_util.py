@@ -1,16 +1,109 @@
 # misc functions related to uploading files to the tool
+from collections.abc import Callable
+
 import dateparser
 import dateutil
 import numpy as np
 import pandas as pd
 from htmltools import tags
 from pandas.api.types import is_numeric_dtype
-from shiny import ui
+from shiny import Inputs, reactive, ui
+from shiny.types import FileInfo
 
-from . import util
+from . import m, util
 from .m import DATETIMECOL
 from .schema import Schema, get_schema
 from .util import jlog1, print_func_name
+
+
+def read_file(
+    input_obj: Inputs,
+    file_info: list[FileInfo],
+    user_state: reactive.Value,
+    invalidate_fn: Callable,
+    test_ui_update_fn: Callable,
+    review_update_fn: Callable,
+):
+    fpath = file_info[0]['datapath']  # file path internal to browser, only used here
+    fname = file_info[0]['name']  # file name used as unique key, used in many functions
+    fsize = util.get_file_size(fpath)
+    fsize_mb = round(fsize / 1_000_000, 1)
+
+    if fsize > m.MAX_FILE_SIZE_BYTES:
+        util.show_error(
+            f'File size ({fsize_mb} MB) exceeds maximum of {m.MAX_FILE_SIZE_MB} MB',
+            duration=None,
+        )
+        return None
+    elif fsize > m.WARN_FILE_SIZE_BYTES:
+        util.show_warning(f'File sizes greater than {m.WARN_FILE_SIZE_MB} MB may cause performance issues.')
+        progress = ui.Progress(0, 3)  # this needs to be closed before the function completes
+    else:
+        progress = None
+
+    # Read all upload settings
+    with reactive.isolate():
+        read_kwargs = {}
+        selected_ff = input_obj.sel_file_format()
+
+        if not input_obj.checkbox_data_has_header():
+            read_kwargs['header'] = None
+
+        if input_obj.checkbox_skip_n_rows():
+            read_kwargs['skiprows'] = input_obj.input_skip_n_rows()
+
+    # Load file
+    try:
+        util.cond_progress(progress, 0, 'Reading file into python')
+        df = actually_read_file(fpath, selected_ff, read_kwargs)
+    except Exception as e:
+        util.cond_progress_close(progress)
+        return format_upload_error_msg(fname, exception=e)
+
+    msg_kw = {}
+    # Register file with internal systems
+    util.cond_progress(progress, 1, 'Setting up tool internals')
+    state = user_state()
+    file_obj = state.add_file(fname, df, selected_ff)
+    msg_kw['total_cols'] = len(file_obj.df.columns)
+    msg_kw['num_date_cols'] = len(file_obj.date_cols)
+    msg_kw['num_numeric_cols'] = len(file_obj.num_cols)
+    msg_kw['composite_date_col'] = file_obj.composite_date_col
+
+    # Make file available on all relevant tabs
+    util.cond_progress(progress, 2, 'Refreshing tool state')
+    ui.update_select('sel_files_check', choices=state.get_filenames())
+    ui.update_select('sel_files_test', choices=state.get_filenames())
+    ui.update_select('sel_files_viz', choices=state.get_filenames())
+    ui.update_select('sel_files_export', choices=state.get_filenames())
+
+    # Update selectors to the most recently uploaded file - we only need to update one
+    # and the rest will sync with it.
+    ui.update_select('sel_files_check', selected=fname)
+
+    # If a user uploads a file more than one time, toggling the header button between
+    # uploads, the resulting data may have different column names. If so, we need to
+    # make sure to refresh a few tabs so that they don't display the previous column names.
+    with reactive.isolate():
+        # Refresh table in review tab
+        if input_obj.sel_files_check() == fname:
+            invalidate_fn('sel_files_check')
+
+        # Refresh test ui in test tab
+        if input_obj.sel_files_test() == fname:
+            test_ui_update_fn(file_obj)
+
+        # Refresh column names in plot dropdowns
+        if input_obj.sel_files_viz() == fname:
+            review_update_fn(file_obj)
+
+        # Refresh export table
+        if input_obj.sel_files_export() == fname:
+            invalidate_fn('sel_files_export')
+
+    util.cond_progress_close(progress)
+    jlog1('read_file exit')
+    return format_upload_msg(fname, **msg_kw)
 
 
 # This could support other delimiters
@@ -26,7 +119,7 @@ def read_csv(fpath, kwargs):
     return df
 
 
-def read_file(fpath, selected_ff, kwargs):
+def actually_read_file(fpath, selected_ff, kwargs):
     if schema := get_schema(selected_ff):
         # Override settings from the UI, they only pertain when no file format is selected
         kwargs = schema.pandas_read_csv_arguments
