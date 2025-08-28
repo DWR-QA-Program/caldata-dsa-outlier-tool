@@ -13,10 +13,14 @@ from .util import jlog1
 # Saves data to enable undo/redo buttons above the plot
 class PlotState:
     def __init__(self):
-        # This array tracks the indices of points that the user has selected on the graph
+        # Track the indices of points that the user has selected on the graph
         self.selected_points = []
+
         self.undo_stack = []
         self.redo_stack = []
+
+        self.x_range = None
+        self.y_range = None
 
     def get_selected_points(self):
         return self.selected_points
@@ -52,6 +56,13 @@ class PlotState:
         self.add_undo(sel, cols, prev, new)
         return sel, cols, new
 
+    def set_zoom(self, x, y):
+        self.x_range = x
+        self.y_range = y
+
+    def get_zoom(self):
+        return self.x_range, self.y_range
+
     def reset_undo(self):
         self.undo_stack = []
 
@@ -62,14 +73,17 @@ class PlotState:
         self.reset_undo()
         self.reset_redo()
 
+    def reset_zoom(self):
+        self.x_range = None
+        self.y_range = None
+
 
 def plot_data(
     df: pd.DataFrame,
     x_col: str,
     y_col: str,
     schema: schema.Schema,
-    callback_data_selected,
-    callback_clear_selection,
+    plot_state: PlotState,
 ):
     jlog1(f'plot {x_col}/{y_col}')
     jlog1(f'{df[x_col].dtype}')
@@ -113,16 +127,60 @@ def plot_data(
     if not hasattr(fig, '_config') or fig._config is None:
         fig._config = {}
     fig._config['displayModeBar'] = True
+    fig._config['scrollZoom'] = True
 
     # Rename outlier detection columns so they display nicely in the legend.
     od.apply_renames(fig, renames)
 
     # Set up callbacks for when data is selected
     for i, trace in enumerate(fig.data):
-        trace.on_selection(partial(callback_data_selected, trace_num=i))
+        trace.on_selection(partial(callback_data_selected, trace_num=i, plot_state=plot_state))
 
     # Set up callback for when data is deselected - this only needs to happen
     # for one of the traces.
-    fig.data[0].on_deselect(callback_clear_selection)
+    fig.data[0].on_deselect(partial(callback_clear_selection, plot_state=plot_state))
+
+    # Make sure that we capture changes to the zoom (layout) of the plot
+    fig.observe(partial(capture_layout, plot_state=plot_state), names=['_js2py_layoutDelta'], type='change')
+
+    # Apply the saved zoom
+    xrange, yrange = plot_state.get_zoom()
+    if xrange and yrange:
+        fig.update_xaxes(range=xrange)
+        fig.update_yaxes(range=yrange)
 
     return fig
+
+
+# Note about plot callbacks: Plotly catches and completely ignores exceptions within
+# callback functions. We intercept and print them to make debugging possible.
+
+
+# This is executed on each trace in the graph (i.e. each set of labeled points,
+# like "pass", "test1", "test2", etc). Each trace has a 0-indexed list of indices -
+# these are the points on the graph that have been selected. We use the customdata
+# parameter set up for us to map these values to the values in the original DataFrame.
+@util.catch_errors
+def callback_data_selected(trace, points, selector, trace_num: int, plot_state) -> None:
+    jlog1(f'trace #{trace_num}: {trace.legendgroup}')
+
+    # The shape of customdata is a list of lists, each with 1 element. Get
+    # that 1 element for selected indices.
+    df_indices = trace.customdata[points.point_inds, 0]
+
+    if trace_num == 0:
+        plot_state.set_selected_points(df_indices)
+    else:
+        plot_state.append_selected_points(df_indices)
+
+
+# Prevent manual flagging buttons from doing anything when data is deselected
+@util.catch_errors
+def callback_clear_selection(trace, points, plot_state) -> None:
+    plot_state.reset_selected_points()
+
+
+@util.catch_errors
+def capture_layout(change, plot_state):
+    layout = change.owner.layout
+    plot_state.set_zoom(layout.xaxis.range, layout.yaxis.range)

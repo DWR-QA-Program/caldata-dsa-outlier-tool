@@ -303,32 +303,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         req(selected_file := input.sel_files_viz())
         schema = user_state().get_file(selected_file).schema
 
-        return plot.plot_data(df, x_col, y_col, schema, callback_data_selected, callback_clear_selection)
-
-    # Note about callbacks: Plotly catches and completely ignores exceptions within
-    # callback functions. We catch and print them to make debugging possible.
-
-    # This is executed on each trace in the graph (i.e. each set of labeled points,
-    # like "pass", "test1", "test2", etc). Each trace has a 0-indexed list of indices -
-    # these are the points on the graph that have been selected. We use the customdata
-    # parameter set up for us to map these values to the values in the original DataFrame.
-    @util.catch_errors
-    def callback_data_selected(trace, points, selector, trace_num: int) -> None:
-        jlog1(f'trace #{trace_num}: {trace.legendgroup}')
-
-        # The shape of customdata is a list of lists, each with 1 element. Get
-        # that 1 element for selected indices.
-        df_indices = trace.customdata[points.point_inds, 0]
-
-        if trace_num == 0:
-            plot_state.set_selected_points(df_indices)
-        else:
-            plot_state.append_selected_points(df_indices)
-
-    # Prevent manual flagging buttons from doing anything when data is deselected
-    @util.catch_errors
-    def callback_clear_selection(trace, points) -> None:
-        plot_state.reset_selected_points()
+        return plot.plot_data(df, x_col, y_col, schema, plot_state)
 
     def set_flags(indices: list, cols: list[str], value: bool | list[bool]) -> None:
         """
@@ -474,11 +449,12 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         reset_manual_flag_objects()
 
     @reactive.effect
-    def react_to_new_screen_cols():
+    def react_to_new_plot_cols():
         sel_x = input.sel_x()
         sel_y = input.sel_y()
         req(sel_x or sel_y)
         reset_manual_flag_objects()
+        plot_state.reset_zoom()
 
     def emphasize_undo_button():
         asyncio.create_task(update_button_class('btn_undo_flag', 'btn-light', 'btn-warning'))
