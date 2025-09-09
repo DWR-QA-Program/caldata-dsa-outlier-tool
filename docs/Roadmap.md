@@ -20,6 +20,8 @@ Here are our recommendations for developing a robust machine learning model, use
 * **Research methods to create a sufficiently large training dataset.** Here, we used data from one station to train the model. We cannot use one aggregate training dataset, with data from every station, in the model. Wildly different behaviors will introduce uncertainty into the model and produce erronous predictions. Instead, we advise grouping stations with similar behavior. One approach is to create geographic groups of stations. Another is to group stations by climate classification
 * **Develop infrastructure needed to conduct machine learning experiments.** Raw data from O&M is not publicly available. In an ideal case, we should perform the analysis in the same place as the data -- e.g. store the data cloud computing environment and co-locate the code with the compute. Ideally, we should also use a tool to track experiments (e.g. [MLflow](https://mlflow.org)).
 
+![Figure 1](images/kNN_classes.png "Figure 1")
+
 ### Developing an analysis-ready dataset
 This section will include a recommendations on how to develop an analysis-ready dataset.
 
