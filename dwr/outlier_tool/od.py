@@ -14,6 +14,18 @@ from . import app_state, m, od_core
 from .m import _F, MANUAL, MULTIPLE_FAILURES, PASS
 
 OD_IMPLEMENTED = {
+    # Dictionary structure:
+    # 'unique_test_name': {
+    #     'fn': function_that_runs_outlier_dection,
+    #     'plain': 'plain test name'
+    #     'ts_col_type': One of 'x', 'y', or 'xy' to let the tool know what columns
+    #                    to allow test execution on.
+    #     'args': list of tuples (if omitted, the test needs no arguments) (
+    #               ('internal arg name', 'Display argument name', 'data type', 'default value')
+    #             )
+    #     'col_widths': optional configuration to pass to accordion creation, affects argument layout
+    #                   and can be used to limit the overall size of input boxes inside the accordion.
+    # }
     'gross_range_test': {
         'fn': od_core.gross_range_test,
         'plain': 'Gross range test',

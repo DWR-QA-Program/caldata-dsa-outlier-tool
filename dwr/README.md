@@ -59,3 +59,22 @@ tests/test_upload_util.py .....                                                 
 
 ========================================== 5 passed in 0.38s ==========================================
 ```
+
+## Azure deployment information
+
+1. Generate `requirements.txt` with uv
+```bash
+  uv export --format requirements.txt >requirements.txt
+```
+
+2. Note that the app's entrypoint is `main.py` in this folder.
+
+## Adding a new outlier detection test
+
+1. Start by adding a function to `od_core.py`. This function is expected to take, as input, a pandas Series
+object along with any test arguments. It is also expected to output a new Series with boolean values where
+True indicates a test failure.
+
+2. Register the test with the UI by updating the `OD_IMPLEMENTED` object in `od.py`. This object bridges the
+gap between the core outlier detection functions and the user interface. After it has been updated, the UI will
+automatically add the new test to the list of possible tests to run.
