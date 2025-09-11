@@ -30,7 +30,8 @@ def gross_range_test(ts, minimum, maximum) -> pd.Series:
     maximum : float
         The upper bounds for the test (can be None if minimum is not None).
 
-    Returns                                                                                                -------
+    Returns
+    -------
     pandas.Series
         The original time series where True values are outside the bounds and False values are inside.
 
