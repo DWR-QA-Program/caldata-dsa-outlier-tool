@@ -41,6 +41,10 @@ All the packages required to run the tool are listed under `project.dependencies
 uv add [package]
 ```
 
+#### Troubleshooting installation errors:
+
+If you are connected to the DWR network and working behind the DWR firewall, you may get errors installing packages with `uv`. In this case, the work around is to disconnect from ivanti VPN if you are remote or connect to the guest network if you are on site and try again. Once packages are installed, you may reconnect to the DWR network.
+
 ### 4. Run the tool
 
 At this point, all project dependencies should be installed. Running the tool is as simple as executing 1 command from within the `dwr` directory:
@@ -74,7 +78,7 @@ tests/test_upload_util.py .....                                                 
 1. Generate `requirements.txt` with uv
 
 ```bash
-  uv export --format requirements.txt >requirements.txt
+  uv export --format requirements.txt > requirements.txt
 ```
 
 2. Note that the app's entrypoint is `main.py` in this folder.
