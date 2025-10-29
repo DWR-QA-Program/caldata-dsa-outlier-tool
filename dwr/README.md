@@ -9,28 +9,41 @@ This project uses `uv` for python package and virtual environment management. In
 If you prefix your commands with uv run (e.g. `uv run shiny run main.py`), then uv will automatically make sure that the appropriate dependencies are installed before invoking the command.
 
 However, if you want to explicitly ensure that all of the dependencies are installed in the virtual environment, run
+
 ```bash
 uv sync
 ```
+
 in the root of this repository.
 
-Once the dependencies are installed, you can also "activate" the virtual environment by running
+Once the dependencies are installed, you can also "activate" the virtual environment in a bash terminal by running
+
 ```bash
 source .venv/bin/activate
 ```
+
+or in PowerShell by running
+
+`.venv/Scripts/activate.ps1`
+
 from the repository root. With the environment activated, you no longer have to prefix commands with `uv run`.
 
 Which approach to take is largely a matter of personal preference:
 
 - Using the `uv run` prefix is more reliable, as dependencies are always resolved before executing.
-- Using `source .venv/bin/activate` involves less typing.
+- Using `source .venv/bin/activate` or involves less typing.
 
 ### 3. Add Python dependencies
 
 All the packages required to run the tool are listed under `project.dependencies` in the `pyproject.toml` file. To add another package to the `pyproject.toml` file, run:
+
 ```bash
 uv add [package]
 ```
+
+#### Troubleshooting installation errors:
+
+If you are connected to the DWR network and working behind the DWR firewall, you may get errors installing packages with `uv`. In this case, the work around is to disconnect from ivanti VPN if you are remote or connect to the guest network if you are on site and try again. Once packages are installed, you may reconnect to the DWR network.
 
 ### 4. Run the tool
 
@@ -63,8 +76,9 @@ tests/test_upload_util.py .....                                                 
 ## Azure deployment information
 
 1. Generate `requirements.txt` with uv
+
 ```bash
-  uv export --format requirements.txt >requirements.txt
+  uv export --format requirements.txt > requirements.txt
 ```
 
 2. Note that the app's entrypoint is `main.py` in this folder.
@@ -72,9 +86,8 @@ tests/test_upload_util.py .....                                                 
 ## Adding a new outlier detection test
 
 1. Start by adding a function to `od_core.py`. This function is expected to take, as input, a pandas Series
-object along with any test arguments. It is also expected to output a new Series with boolean values where
-True indicates a test failure.
-
+   object along with any test arguments. It is also expected to output a new Series with boolean values where
+   True indicates a test failure.
 2. Register the test with the UI by updating the `OD_IMPLEMENTED` object in `od.py`. This object bridges the
-gap between the core outlier detection functions and the user interface. After it has been updated, the UI will
-automatically add the new test to the list of possible tests to run.
+   gap between the core outlier detection functions and the user interface. After it has been updated, the UI will
+   automatically add the new test to the list of possible tests to run.
