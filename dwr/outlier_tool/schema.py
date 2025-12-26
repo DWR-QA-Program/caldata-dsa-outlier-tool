@@ -49,6 +49,7 @@ class Schema:
     description: str | None = ''
     file_format_description: str | None = 'This file format has no description.'
     pandas_read_csv_arguments: dict | None = field(default_factory=dict)
+    station_id_column: str | None = None
 
     # Support list-type indexing
     def __getitem__(self, idx):
@@ -73,6 +74,7 @@ class Schema:
             description=data.get('description', ''),
             file_format_description=data.get('file_format_description', ''),
             pandas_read_csv_arguments=data.get('pandas_read_csv_arguments', {}),
+            station_id_column=data.get('station_id_column'),
             columns=columns,
         )
 

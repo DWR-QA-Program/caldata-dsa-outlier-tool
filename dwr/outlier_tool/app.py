@@ -137,7 +137,9 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
         user_state().get_file(selected_file).last_selected_y_col = y_col
 
-    # determine current Station_ID (for default presistence)
+    # determine current station from either schema or selected column
+    # will only return one value; assumption is multiple stations are not (supposed to be) in file
+    # TODO: broader error handling for when multiple stations exist
     @reactive.calc
     def current_station_id() -> str | None:
         req(selected_file := input.sel_files_test())
@@ -145,11 +147,25 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         df = file_obj.df
         if df is None or df.empty:
             return None
+        
+        # Determine station ID column
+        # derive from schema, if applicable
         station_col = None
-        for c in df.columns:
-            if str(c).strip().lower() == 'station_id':
-                station_col = c
-                break
+        sch = getattr(file_obj, 'schema', None)
+        if sch is not None:
+            hinted = getattr(sch, 'station_id_column', None)
+            if hinted and hinted in df.columns:
+                station_col = hinted
+
+        # if not, look for "station_id" column
+        # TODO: have this be based on a selected "station" column in the UI
+        if station_col is None:
+            for c in df.columns:
+                if str(c).strip().lower() == 'station_id':
+                    station_col = c
+                    break
+
+        # if there is none, return None
         if station_col is None:
             return None
 
