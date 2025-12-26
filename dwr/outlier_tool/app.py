@@ -145,8 +145,6 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         df = file_obj.df
         if df is None or df.empty:
             return None
-
-        # find a Station_ID column
         station_col = None
         for c in df.columns:
             if str(c).strip().lower() == 'station_id':
@@ -155,6 +153,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         if station_col is None:
             return None
 
+        # clean col value
         vals = (
             df[station_col]
             .dropna()
