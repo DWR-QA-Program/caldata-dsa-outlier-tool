@@ -8,6 +8,11 @@ from shiny import Inputs, reactive, ui
 from . import od, od_core
 from .app_ui import trash_svg
 
+from .caching import (
+    clear_station_test_defaults,
+    get_station_test_defaults,
+    set_station_test_defaults,
+)
 
 @dataclass
 class ODTest:
@@ -90,7 +95,7 @@ class ODTestSet:
     # This function enables the server to show the user a list of accordions, one
     # per test. The user will be able to edit test parameters/arguments and those
     # values will be collected when "run tests" is clicked.
-    def get_ui(self, input_obj: Inputs):
+    def get_ui(self, input_obj: Inputs, station_id: str | None = None):
         accordions = []
 
         # Every time this function is called, all accordions are replaced. As a convenience
@@ -112,7 +117,15 @@ class ODTestSet:
                     # Create unique identifier of this argument so we can search for it later
                     input_id = f'{test.test_key}_{test.test_col.replace(" ", "_")}_{arg_id}'
                     existing_value = test.get_argument(arg_id, default_value)  # can return None
-                    print(arg_id, existing_value)
+                    # print(arg_id, existing_value)
+
+                    # For given Station_ID, pull cached defaults if they exist
+                    if station_id and arg_id not in test._fn_kwargs:
+                        cached = get_station_test_defaults(station_id, test.test_key, test.test_col)
+                        if cached and arg_id in cached:
+                            existing_value = cached[arg_id]
+                            # store value
+                            test._fn_kwargs[arg_id] = existing_value
 
                     if arg_type is str:
                         inputs.append(ui.input_text(input_id, f'{arg_label}:', existing_value))
@@ -156,3 +169,33 @@ class ODTestSet:
     def get_test_list(self, input_obj: Inputs) -> list[tuple[Callable, str, dict]]:
         self.gather_user_arguments(input_obj)
         return [test.to_test_arguments() for test in self]
+    
+    # Presist test values for a given station
+    def persist_station_defaults(self, station_id: str, input_obj: Inputs) -> None:
+        """
+        Persist current argument values for all tests with given Station_ID key
+
+        Behavior:
+        - Captures latest browser values into each ODTest._fn_kwargs
+        - If a test has no args, does nothing for that test
+        - If all arg values are None (or none exist), clears the stored defaults
+        - Otherwise stores the full arg dict for that station/column/test
+        """
+
+        if not station_id:
+            return
+
+        # Capture latest values from the browser into each ODTest._fn_kwargs
+        self.gather_user_arguments(input_obj)
+
+        for test in self:
+            test_info = od.OD_IMPLEMENTED.get(test.test_key, {})
+            if 'args' not in test_info:
+                continue
+
+            # Store the whole argument dict; if everything is None, remove remembered defaults
+            defaults = dict(test._fn_kwargs) if test._fn_kwargs else {}
+            if (not defaults) or all(v is None for v in defaults.values()):
+                clear_station_test_defaults(station_id, test.test_key, test.test_col)
+            else:
+                set_station_test_defaults(station_id, test.test_key, test.test_col, defaults)

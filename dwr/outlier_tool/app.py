@@ -73,11 +73,15 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
         return sync_fn
 
+    # TODO: don't think extended descriptions are a thing? add those in?
+    # small edit to avoid the "too many values" error
     @render.ui
     def file_format_info():
-        return schema.get_file_format_info(input.sel_file_format())
-        description, extended_description = schema.get_file_format_info(input.sel_file_format())
-        return (ui.p(description), ui.p(extended_description))
+        # return schema.get_file_format_info(input.sel_file_format())
+        # description, extended_description = schema.get_file_format_info(input.sel_file_format())
+        # return (ui.p(description), ui.p(extended_description))
+        info = schema.get_file_format_info(input.sel_file_format())
+        return ui.p(info)
 
     @render.ui
     def upload_text():
@@ -133,6 +137,36 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
         user_state().get_file(selected_file).last_selected_y_col = y_col
 
+    # determine current Station_ID (for default presistence)
+    @reactive.calc
+    def current_station_id() -> str | None:
+        req(selected_file := input.sel_files_test())
+        file_obj = user_state().get_file(selected_file)
+        df = file_obj.df
+        if df is None or df.empty:
+            return None
+
+        # find a Station_ID column
+        station_col = None
+        for c in df.columns:
+            if str(c).strip().lower() == 'station_id':
+                station_col = c
+                break
+        if station_col is None:
+            return None
+
+        vals = (
+            df[station_col]
+            .dropna()
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .unique()
+            .tolist()
+        )
+
+        return vals[0] if vals else None
+
     @reactive.effect
     @reactive.event(input.btn_od)
     @print_func_name()
@@ -141,6 +175,11 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         if len(tests) == 0:
             util.show_warning('You need to select tests first')
             return
+
+        # persist remembered defaults
+        sid = current_station_id()
+        if sid and hasattr(tests, 'persist_station_defaults'):
+            tests.persist_station_defaults(sid, input)
 
         req(selected_file := input.sel_files_test())
         file_obj = user_state().get_file(selected_file)
@@ -573,9 +612,9 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
     @render.ui
     def test_setup_right():
         tests = user_selected_tests()
-
+        sid = current_station_id() # for default persistence
         # Set up accordion objects
-        return ui.panel_well(tests.get_ui(input))
+        return ui.panel_well(tests.get_ui(input, station_id=sid))
 
     @reactive.effect
     @reactive.event(input.btn_test_help)
