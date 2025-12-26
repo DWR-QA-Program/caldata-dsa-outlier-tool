@@ -137,39 +137,93 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
         user_state().get_file(selected_file).last_selected_y_col = y_col
 
+
+    # Functions related to station ID column
+
+    # Helper: col ID from schema
+    def _schema_station_col(file_obj) -> str | None:
+        sch = getattr(file_obj, 'schema', None)
+        if sch is None:
+            return None
+        return getattr(sch, 'station_id_column', None)
+    
+    # Helper: guess col ID based on station-like keywords
+    def _guess_station_col(df: pd.DataFrame) -> str | None:
+        if df is None or df.empty:
+            return None
+
+        keywords = ('site', 'station', 'location')
+        candidates = [
+            c for c in df.columns
+            if any(k in str(c).strip().lower() for k in keywords)
+        ]
+
+        # if none or multiple, no default
+        if len(candidates) != 1:
+            return None
+
+        return candidates[0]
+    
+    # Default station column
+    def _default_station_col(file_obj) -> str | None:
+        df = getattr(file_obj, 'df', None)
+        if df is None or df.empty:
+            return None
+
+        # based on schema
+        sch_col = _schema_station_col(file_obj)
+        if sch_col and sch_col in df.columns:
+            return sch_col
+
+        # if not in schema (or none selected), based on col names
+        return _guess_station_col(df)
+    
+    @reactive.effect
+    def update_station_col_selector():
+        req(selected_file := input.sel_files_check())
+        file_obj = user_state().get_file(selected_file)
+        df = file_obj.df
+
+        if df is None or df.empty:
+            ui.update_select('sel_station_col', choices={'': '(none)'}, selected='')
+            return
+
+        choices = {'': '(none)', **{c: c for c in df.columns}}
+
+        prev = getattr(file_obj, 'last_selected_station_col', '')
+        if prev in df.columns:
+            selected = prev
+        else:
+            selected = _default_station_col(file_obj) or ''
+            setattr(file_obj, 'last_selected_station_col', selected)
+
+        ui.update_select('sel_station_col', choices=choices, selected=selected)
+
+    # track selected col during app use
+    @reactive.effect
+    def track_selected_station_col():
+        req(selected_file := input.sel_files_check())
+        col = input.sel_station_col()
+        file_obj = user_state().get_file(selected_file)
+        setattr(file_obj, 'last_selected_station_col', col)
+
     # determine current station from either schema or selected column
     # will only return one value; assumption is multiple stations are not (supposed to be) in file
     # TODO: broader error handling for when multiple stations exist
     @reactive.calc
     def current_station_id() -> str | None:
-        req(selected_file := input.sel_files_test())
+        req(selected_file := input.sel_files_check())
         file_obj = user_state().get_file(selected_file)
         df = file_obj.df
         if df is None or df.empty:
             return None
-        
-        # Determine station ID column
-        # derive from schema, if applicable
-        station_col = None
-        sch = getattr(file_obj, 'schema', None)
-        if sch is not None:
-            hinted = getattr(sch, 'station_id_column', None)
-            if hinted and hinted in df.columns:
-                station_col = hinted
 
-        # if not, look for "station_id" column
-        # TODO: have this be based on a selected "station" column in the UI
-        if station_col is None:
-            for c in df.columns:
-                if str(c).strip().lower() == 'station_id':
-                    station_col = c
-                    break
-
-        # if there is none, return None
-        if station_col is None:
+        station_col = input.sel_station_col()
+        if not station_col:
+            return None
+        if station_col not in df.columns:
             return None
 
-        # clean col value
         vals = (
             df[station_col]
             .dropna()
@@ -230,6 +284,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         # Finally, actually run the outlier detection
         od_task.invoke(test_list, file_obj)
 
+    # Display data table in "Check" tab
     @render.data_frame
     @reactive.calc
     @print_func_name
@@ -243,8 +298,12 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         od_cols = od.get_all_od_names(df)
         df = df[[c for c in df.columns if c not in m.INTERNAL_COLS and c not in od_cols]]
 
+        station_col = input.sel_station_col()
+
         # Enable column header highlighting
         def mapper(col):
+            if station_col and col == station_col:
+                return 'station'
             if col in file_obj.date_cols:
                 return 'datetime'
             if col in file_obj.num_cols:

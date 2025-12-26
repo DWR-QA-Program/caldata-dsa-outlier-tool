@@ -270,7 +270,28 @@ app_ui = ui.page_sidebar(
         ui.nav_panel(
             '2. Check',
             tags.h4('Ensure the data looks right', class_='tab-title'),
-            ui.input_select('sel_files_check', 'File:', []),
+            ui.row(
+                ui.column(6, ui.input_select('sel_files_check', 'File:', [])),
+                ui.column(
+                    6,
+                    ui.input_select(
+                        'sel_station_col',
+                        'Station column (optional):',
+                        {'': '(none)'},
+                        selected='',
+                    ),
+                ),
+            ),
+
+            # color key legend
+            ui.div(
+                ui.tags.span('Column color key:', class_='me-2'),
+                ui.tags.span('Station ID', class_='badge bg-warning text-dark'),
+                ui.tags.span('Datetime', class_='badge bg-success me-2'),
+                ui.tags.span('Numeric', class_='badge bg-primary me-2'),
+                class_='mb-2',
+            ),
+
             ui.output_data_frame('check_table'),
         ),
         ui.nav_panel(

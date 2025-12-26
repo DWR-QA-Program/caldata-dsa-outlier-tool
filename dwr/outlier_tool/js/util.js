@@ -1,5 +1,6 @@
 const dateBgClass = 'bg-success';
 const numBgClass = 'bg-primary';
+const stationBgClass = 'bg-warning';
 
 // Enable changing the class of an existing button (not natively supported in py shiny)
 Shiny.addCustomMessageHandler('update_btn_class', function(data) {
@@ -157,6 +158,8 @@ function colorTableHeaders(tableId) {
             bgClass = numBgClass;
         } else if (columnType == 'datetime') {
             bgClass = dateBgClass;
+        } else if (columnType == 'station') {
+            bgClass = stationBgClass;
         }
 
         if (bgClass) {
