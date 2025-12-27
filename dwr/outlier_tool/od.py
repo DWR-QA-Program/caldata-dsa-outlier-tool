@@ -136,7 +136,7 @@ def get_od_col_renames(od_cols) -> dict[str, str]:
     renames = {}
     for col in od_cols:
         if MANUAL in col:  # manual flag
-            renames[col] = MANUAL
+            renames[col] = 'manually flagged'
         else:
             value = col[col.find(_F) :].lstrip('_')  # remove internal text
             value = value.replace('_', ' ').capitalize()  # make name look better
@@ -146,6 +146,7 @@ def get_od_col_renames(od_cols) -> dict[str, str]:
     # don't want them to change.
     renames[PASS] = PASS
     renames[MULTIPLE_FAILURES] = MULTIPLE_FAILURES
+    renames[MANUAL] = 'manually flagged'
     return renames
 
 

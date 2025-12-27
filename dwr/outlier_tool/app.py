@@ -449,13 +449,17 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         user_state().get_file(selected_file).df = dfcp
         active_df.set(dfcp)
 
-    def manual_flag(value: bool) -> None:
+    # Manually flag/unflag data points via toggle
+    def manual_flag(value: bool | None) -> None:
         selected_points = plot_state.get_selected_points()
         if len(selected_points) == 0:
             util.show_warning(
                 'No data points are selected. Use the box or lasso selector in the top right.'
             )
             return
+
+        # normalize indices
+        selected_points = np.unique(np.asarray(selected_points, dtype=int))
 
         with reactive.isolate():
             df = active_df()
@@ -464,54 +468,105 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         manual_y_col = od.get_manual_col(y_col)
 
         if manual_y_col not in df:
-            df[manual_y_col] = False  # Populate entire column with False initially
+            df[manual_y_col] = False  # initialize column
 
-        if value:
-            # We want to flag a column
-            target_cols = [manual_y_col]
-            new_values = [value for _ in selected_points]
-        else:
-            # We want to unflag all relevant columns (a data point may have failed more than
-            # one outlier test).
-            target_cols = od.get_od_names(df, y_col)
-            new_values = [tuple(value for _ in target_cols) for _ in selected_points]
+        # cache original test-flags so a later toggle can restore them
+        if not hasattr(plot_state, 'saved_test_flags'):
+            plot_state.saved_test_flags = {}  # (y_col, idx) -> list[str]
 
-        prev_values = df.loc[selected_points, target_cols].copy()
+        # toggle mode
+        if value is None:
+            od_cols = od.get_od_names(df, y_col)
+            if manual_y_col not in od_cols:
+                od_cols = [manual_y_col, *od_cols]
 
-        # Save previous data to enable undos
-        plot_state.add_undo(selected_points, target_cols, prev_values, new_values)
-        emphasize_undo_button()
+            test_cols = [c for c in od_cols if c != manual_y_col]
 
-        # Wipe out any possible redos
-        plot_state.reset_redo()
-        unemphasize_redo_button()
+            prev_values = df.loc[selected_points, od_cols].copy()
+            new_df = prev_values.copy()
 
-        set_flags(selected_points, target_cols, value)
-
-        invalidate_file_selector('sel_files_export')
-
-    @reactive.effect
-    @reactive.event(input.btn_flag)
-    def flag():
-        try:
-            manual_flag(True)
-            reset_graph_selection()  # could be removed if the graph isn't always reloaded
-        except Exception as e:
-            if not isinstance(e, SilentException):
-                ui.notification_show(
-                    ui.p(f'Please report this to the admin: "flag": {e!r}'), duration=None, type='error'
+            # identify whether each point is currently flagged by at least one (not manual) test
+            if test_cols:
+                test_flagged = (
+                    df.loc[selected_points, test_cols]
+                    .fillna(False)
+                    .astype(bool)
+                    .any(axis=1)
                 )
+            else:
+                test_flagged = pd.Series(False, index=selected_points)
+
+            for idx in selected_points:
+                key = (y_col, int(idx))
+
+                if bool(test_flagged.loc[idx]):
+                    # flagged by at least one test:
+                    # clear all flags, but remember which tests were true
+                    flagged_tests = (
+                        df.loc[idx, test_cols]
+                        .fillna(False)
+                        .astype(bool)
+                    )
+                    plot_state.saved_test_flags[key] = flagged_tests[flagged_tests].index.tolist()
+
+                    new_df.loc[idx, od_cols] = False
+
+                else:
+                    # currently not test-flagged:
+                    # if saved tests exist, restore them; otherwise, toggle manual flag
+                    saved = plot_state.saved_test_flags.get(key, [])
+                    saved = [c for c in saved if c in df.columns and c in od_cols]
+
+                    if saved:
+                        new_df.loc[idx, od_cols] = False
+                        new_df.loc[idx, saved] = True
+                        new_df.loc[idx, manual_y_col] = False
+                    else:
+                        cur_manual = bool(df.loc[idx, manual_y_col]) if manual_y_col in df else False
+                        new_df.loc[idx, manual_y_col] = not cur_manual
+
+            # build new_values for undo/redo buttons
+            if len(od_cols) == 1:
+                new_values = [bool(new_df.loc[i, od_cols[0]]) for i in selected_points]
+            else:
+                new_values = [tuple(new_df.loc[i, od_cols].tolist()) for i in selected_points]
+
+            # save previous data to enable undos
+            plot_state.add_undo(selected_points, od_cols, prev_values, new_values)
+            emphasize_undo_button()
+
+            # wipe out any possible redos
+            plot_state.reset_redo()
+            unemphasize_redo_button()
+
+            # apply changes
+            for col in od_cols:
+                prev_col = prev_values[col].fillna(False).astype(bool).to_numpy()
+                next_col = new_df[col].fillna(False).astype(bool).to_numpy()
+
+                idx_on = selected_points[(~prev_col) & (next_col)]
+                idx_off = selected_points[(prev_col) & (~next_col)]
+
+                if len(idx_on) > 0:
+                    set_flags(idx_on, [col], True)
+                if len(idx_off) > 0:
+                    set_flags(idx_off, [col], False)
+
+            invalidate_file_selector('sel_files_export')
+            return
 
     @reactive.effect
-    @reactive.event(input.btn_unflag)
-    def unflag():
+    @reactive.event(input.btn_toggle_flag)
+    def toggle_flag():
         try:
-            manual_flag(False)
-            reset_graph_selection()  # could be removed if the graph isn't always reloaded
+            manual_flag(None)
+            reset_graph_selection()
         except Exception as e:
             if not isinstance(e, SilentException):
                 ui.notification_show(
-                    ui.p(f'Please report this to the admin: "unflag": {e!r}'), duration=None, type='error'
+                    ui.p(f'Please report this to the admin: "toggle_flag": {e!r}'),
+                    duration=None,
+                    type='error'
                 )
 
     @reactive.effect

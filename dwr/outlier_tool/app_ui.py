@@ -286,7 +286,7 @@ app_ui = ui.page_sidebar(
             # color key legend
             ui.div(
                 ui.tags.span('Column color key:', class_='me-2'),
-                ui.tags.span('Station ID', class_='badge bg-warning text-dark'),
+                ui.tags.span('Station ID', class_='badge bg-warning text-dark me-2'),
                 ui.tags.span('Datetime', class_='badge bg-success me-2'),
                 ui.tags.span('Numeric', class_='badge bg-primary me-2'),
                 class_='mb-2',
@@ -377,43 +377,71 @@ app_ui = ui.page_sidebar(
                     7,
                     ui.row(
                         ui.p(
+                            tags.b('Instructions:'),
+                            ui.br(),
                             '1. Select outliers using',
                             ui.HTML('&nbsp&nbsp'),
                             ui.HTML(box_svg),
                             ui.br(),
-                            '2. Click flag or unflag to change their status',
+                            '2. Click "toggle flag" to manually flag/unflag data',
                         ),
                     ),
+                    # break line
                     ui.row(
-                        ui.input_select('sel_x', 'x-axis (date):', []),
-                        ui.input_select('sel_y', 'y-axis (number):', []),
+                        tags.hr(style='margin: 6px 0 10px 0;')
                     ),
+
+                    # center the labels for x/y selects
+                    # TODO: move to css file
+                    ui.tags.style("""
+                    #sel_x-label, #sel_y-label {
+                        text-align: center;
+                        width: 100%;
+                        display: block;
+                    }
+                    """),
+
+                    # select x/y
                     ui.row(
-                        ui.column(2),
-                        ui.column(
-                            4,
-                            ui.input_action_button(
-                                'btn_flag', 'Flag', class_='btn-danger', style='margin: 0 3px;'
-                            ),
-                            ui.input_action_button(
-                                'btn_unflag', 'Unflag', class_='btn-success', style='margin: 0 3px;'
-                            ),
-                            style='display:flex; justify-content: center',
-                        ),
-                        ui.column(
-                            4,
-                            ui.input_action_button(
-                                'btn_undo_flag', 'Undo', class_='btn-light', style='margin: 0 3px;'
-                            ),
-                            ui.input_action_button(
-                                'btn_redo_flag', 'Redo', class_='btn-light', style='margin: 0 3px;'
-                            ),
-                            style='display:flex; justify-content: center',
-                        ),
-                        ui.column(2),
+                        tags.div(
+                            tags.div(ui.input_select('sel_x', 'x-axis (date):', []), style='min-width: 260px;'),
+                            tags.div(ui.input_select('sel_y', 'y-axis (number):', []), style='min-width: 260px;'),
+                            style='display:flex; justify-content:center; gap: 12px; width:100%;'
+                        )
                     ),
+
+                    # plot row
                     ui.row(
-                        output_widget('plot_data'),
+                        tags.div(
+                            output_widget('plot_data'),
+                            style=(
+                                'border: 1px solid #dee2e6; border-radius: 6px; padding: 6px; '
+                                'background: #fff; margin-top: 10px; margin-bottom: 10px;'
+                            )
+                        )
+                    ),
+
+                    # manual flag toggle button
+                    ui.row(
+                        tags.div(
+                            # ui.p('Manually flag/unflag data', style='margin: 0 0 4px 0; text-align:center;'),
+                            tags.div(
+                                ui.input_action_button(
+                                    'btn_undo_flag', 'Undo', class_='btn-light', style='margin: 0 3px;'
+                                ),
+                                ui.input_action_button(
+                                    'btn_toggle_flag',
+                                    'Toggle Flag',
+                                    class_='btn-secondary',
+                                    style='margin: 0 3px;'
+                                ),
+                                ui.input_action_button(
+                                    'btn_redo_flag', 'Redo', class_='btn-light', style='margin: 0 3px;'
+                                ),
+                                style='display:flex; justify-content:center; width:100%;'
+                            ),
+                            style='width:100%; margin-top: 10px;'
+                        )
                     ),
                 ),
             ),
