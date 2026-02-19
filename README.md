@@ -1,6 +1,34 @@
-# caldata-dsa-dwr
-CalData's DSA project with DWR. This repository contains code to help detect outliers in water quality
-data. The code contains [traditional outlier detection methods](dwr/outlier_tool/od_core.py), an
-[example machine learning method](dwr/ml_example.ipynb), and a full-fledged web-based user interface
-for data analysis. To get the user interface running on your local system, follow instructions
-[here](dwr/README.md).
+# webapp-testing
+
+Simple PyShiny app for infrastructure testing.
+
+## Run locally with uv (Python 3.10 pinned)
+
+```powershell
+uv python install 3.10
+uv venv --python 3.10
+.\.venv\Scripts\Activate.ps1
+uv sync
+uv run shiny run --reload --host 127.0.0.1 --port 8081 app.py
+```
+
+Open `http://127.0.0.1:8081`.
+
+## Run with Docker
+
+```powershell
+docker build -t webapp-testing .
+docker run --rm -p 8000:8000 webapp-testing
+```
+
+Then open `http://127.0.0.1:8000`.
+
+## Azure Web App startup command
+
+Use `startup.sh` as the startup command.
+
+Example startup command:
+
+```bash
+bash /home/site/wwwroot/startup.sh
+```
