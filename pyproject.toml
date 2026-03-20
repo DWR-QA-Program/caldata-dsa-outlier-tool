@@ -3,7 +3,7 @@ name = "caldata-dsa-dwr"
 version = "0.1.0"
 description = "CalData's DSA project with DWR"
 authors = [{ name = "Monica Bobra", email = "monica.bobra@innovation.ca.gov" }]
-requires-python = ">=3.10,<3.11"
+requires-python = ">=3.13,<3.14"
 readme = "README.md"
 dependencies = [
     "scikit-learn>=1.6.0,<2",

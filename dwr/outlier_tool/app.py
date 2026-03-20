@@ -209,7 +209,6 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
     # determine current station from either schema or selected column
     # will only return one value; assumption is multiple stations are not (supposed to be) in file
-    # TODO: broader error handling for when multiple stations exist
     @reactive.calc
     def current_station_id() -> str | None:
         req(selected_file := input.sel_files_check())
@@ -235,6 +234,25 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         )
 
         return vals[0] if vals else None
+
+    # warning when multiple strings exist in station column
+    @render.ui
+    def station_col_warning():
+        req(selected_file := input.sel_files_check())
+        file_obj = user_state().get_file(selected_file)
+        df = file_obj.df
+        if df is None or df.empty:
+            return None
+
+        station_col = input.sel_station_col()
+        if not station_col or station_col not in df.columns:
+            return None
+
+        vals = df[station_col].dropna().astype(str).str.strip().unique().tolist()
+        if len(vals) > 1:
+            return util.danger(f'Station column has {len(vals)} unique values. Only the first ({vals[0]}) will be used.')
+        return None
+
 
     @reactive.effect
     @reactive.event(input.btn_od)

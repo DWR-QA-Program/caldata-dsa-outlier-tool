@@ -273,13 +273,17 @@ app_ui = ui.page_sidebar(
             ui.row(
                 ui.column(6, ui.input_select('sel_files_check', 'File:', [])),
                 ui.column(
-                    6,
+                    3,
                     ui.input_select(
                         'sel_station_col',
                         'Station column (optional):',
                         {'': '(none)'},
                         selected='',
                     ),
+                ),
+                ui.column(
+                    2,
+                    ui.output_ui('station_col_warning'),
                 ),
             ),
 
@@ -424,7 +428,6 @@ app_ui = ui.page_sidebar(
                     # manual flag toggle button
                     ui.row(
                         tags.div(
-                            # ui.p('Manually flag/unflag data', style='margin: 0 0 4px 0; text-align:center;'),
                             tags.div(
                                 ui.input_action_button(
                                     'btn_undo_flag', 'Undo', class_='btn-light', style='margin: 0 3px;'
