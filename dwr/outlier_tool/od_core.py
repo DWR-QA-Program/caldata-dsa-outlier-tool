@@ -196,8 +196,10 @@ def z_score_test(ts: pd.Series, number_of_standard_deviations: int = 3) -> pd.Se
     if ts.empty:
         raise ValueError('No input data.')
     z_score = stats.zscore(ts, nan_policy='omit')
-    return np.abs(z_score) >= number_of_standard_deviations
-
+    return pd.Series(
+        np.abs(z_score) >= number_of_standard_deviations,
+        index=ts.index
+    )
 
 def modified_z_score_test(ts: pd.Series, median_absolute_deviation: float = 4) -> pd.Series:
     """

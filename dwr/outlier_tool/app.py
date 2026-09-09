@@ -25,7 +25,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
     user_state = reactive.Value(app_state.State())
 
     # Container for dynamic upload feedback
-    upload_msg = reactive.Value()
+    upload_msg = reactive.Value(None)
 
     # Dynamically-rendered dataframes
     results_df = reactive.Value(pd.DataFrame())
@@ -36,6 +36,13 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
     user_selected_tests = reactive.Value(od_ui.ODTestSet())  # right column: selected tests
 
     plot_state = plot.PlotState()
+
+    # Confirm format
+    confirmed_format = reactive.Value(None)
+
+    # Review-tab state
+    review_date = '__date__'
+    review_x_value_col = '__review_x_value__'
 
     async def run_od(test_list, file_obj: app_state.File):
         try:
@@ -49,6 +56,9 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
     def read_file():
         file_info: list[FileInfo] | None = input.file1()
         req(file_info)
+
+        confirmed_format.set(None)
+
         if msg := upload_util.read_file(
             input,
             file_info,
@@ -58,6 +68,103 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
             _update_x_and_y_cols,
         ):
             upload_msg.set(msg)
+
+    @reactive.effect
+    @reactive.event(input.btn_confirm_format)
+    def confirm_format():
+        req(selected_file := input.sel_files_check())
+
+        shape = input.radio_data_shape()
+
+        if shape not in {'wide', 'long'}:
+            util.show_error(
+                'Choose how analyte values are listed.'
+            )
+            return
+
+        is_long = shape == 'long'
+        date_col = input.sel_check_date()
+        station_col = input.sel_station_col()
+
+        if is_long:
+            analyte_name_col = input.sel_long_analyte_col()
+            analyte_value_col = input.sel_long_value_col()
+            analyte_cols = []
+
+            assigned_cols = [
+                station_col,
+                date_col,
+                analyte_name_col,
+                analyte_value_col,
+            ]
+        else:
+            analyte_name_col = None
+            analyte_value_col = None
+            analyte_cols = list(
+                input.sel_wide_analyte_cols() or []
+            )
+
+            assigned_cols = [
+                station_col,
+                date_col,
+                *analyte_cols,
+            ]
+
+        assigned_cols = [
+            col for col in assigned_cols
+            if col
+        ]
+
+        if len(assigned_cols) != len(set(assigned_cols)):
+            util.show_error(
+                'Each column can only be assigned one role. '
+                'Choose different columns for station, date, and analyte fields.'
+            )
+            return
+
+        format_info = {
+            'is_long': is_long,
+            'date_col': date_col,
+            'station_col': station_col,
+            'analyte_name_col': analyte_name_col,
+            'analyte_value_col': analyte_value_col,
+            'analyte_cols': analyte_cols,
+        }
+
+        confirmed_format.set(format_info)
+
+        file_obj = user_state().get_file(selected_file)
+
+        file_obj.is_long = is_long
+        file_obj.last_selected_x_col = date_col
+        file_obj.last_selected_station_col = station_col
+
+        if is_long:
+            file_obj.analyte_col = analyte_name_col
+            file_obj.value_col = analyte_value_col
+            file_obj.analyte_cols = []
+        else:
+            file_obj.analyte_col = None
+            file_obj.value_col = None
+            file_obj.analyte_cols = analyte_cols
+
+        _initialize_test_ui(file_obj)
+        _update_x_and_y_cols(file_obj)
+
+    @render.ui
+    def format_preview():
+        if confirmed_format() is None:
+            return ui.p(
+                'Data format has not been confirmed yet. '
+                'Confirm the format to preview your data.',
+                class_='text-muted',
+            )
+
+        return ui.div(
+            ui.output_ui('column_color_key'),
+            ui.output_data_frame('check_table'),
+        )
+
 
     # When the user selects a file, they generally expect to see the same selected file on
     # all navigation tabs. We keep all file selectors in sync here to meet this expectation.
@@ -85,7 +192,10 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
     @render.ui
     def upload_text():
-        return upload_msg()
+        msg = upload_msg()
+        if msg is None:
+            return ui.p('No file uploaded yet.', class_='text-muted')
+        return msg
 
     @render.ui
     def show_rows_to_skip():
@@ -100,44 +210,122 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
             return None
         return app_ui.show_upload_options()
 
-    def _update_x_cols(file_obj: app_state.File):
-        ui.update_select('sel_x', choices=file_obj.date_cols, selected=file_obj.last_selected_x_col)
+    def _review_analyte(file_obj: app_state.File):
+        analytes = file_obj.get_analyte_names()
+        selected = file_obj.last_selected_y_col
 
-    def _update_y_cols(file_obj: app_state.File):
-        ui.update_select('sel_y', choices=file_obj.num_cols, selected=file_obj.last_selected_y_col)
+        if selected not in analytes:
+            selected = analytes[0] if analytes else None
 
+        return selected
+
+    def _update_review_against(file_obj: app_state.File, analyte=None):
+        analyte = analyte or _review_analyte(file_obj)
+        date_col = file_obj.last_selected_x_col
+
+        choices = {}
+        if date_col:
+            choices[review_date] = date_col
+
+        for other_analyte in file_obj.get_analyte_names():
+            if other_analyte != analyte:
+                choices[other_analyte] = other_analyte
+
+        selected = review_date if review_date in choices else next(iter(choices), None)
+
+        ui.update_select(
+            'sel_review_against',
+            choices=choices,
+            selected=selected,
+        )
+
+    def _update_review_analyte(file_obj: app_state.File):
+        analytes = file_obj.get_analyte_names()
+        selected = _review_analyte(file_obj)
+
+        ui.update_select(
+            'sel_review_analyte',
+            choices=analytes,
+            selected=selected,
+        )
+
+        return selected
+
+    # Keep this legacy callback name because upload_util.read_file() already uses it.
     def _update_x_and_y_cols(file_obj: app_state.File):
-        _update_x_cols(file_obj)
-        _update_y_cols(file_obj)
+        analyte = _update_review_analyte(file_obj)
+        _update_review_against(file_obj, analyte)
 
-    # There are 2 selectors for an x and y column on the review page - this function
-    # keeps them in sync with the selected file on that page.
     @reactive.effect
-    def update_x_and_y_cols():
+    def initialize_review_ui():
         req(selected_file := input.sel_files_viz())
-
         file_obj = user_state().get_file(selected_file)
 
         _update_x_and_y_cols(file_obj)
-
         active_df.set(file_obj.df)
-        jlog1(f'updated: x={file_obj.last_selected_x_col}, y={file_obj.last_selected_y_col}')
 
     @reactive.effect
-    def track_selected_x_col():
+    def track_review_analyte():
         req(selected_file := input.sel_files_viz())
-        req(x_col := input.sel_x())
+        req(analyte := input.sel_review_analyte())
 
-        user_state().get_file(selected_file).last_selected_x_col = x_col
-
-    @reactive.effect
-    def track_selected_y_col():
-        req(selected_file := input.sel_files_viz())
-        req(y_col := input.sel_y())
-
-        user_state().get_file(selected_file).last_selected_y_col = y_col
+        file_obj = user_state().get_file(selected_file)
+        file_obj.last_selected_y_col = analyte
+        _update_review_against(file_obj, analyte)
 
 
+    # color stuff (check tab)
+    @render.ui
+    def column_color_key():
+        format_info = confirmed_format()
+
+        if format_info is None:
+            return None
+
+        is_long = format_info['is_long']
+
+        badges = [
+            ui.tags.span(
+                'Station',
+                class_='badge column-station me-2',
+            ),
+            ui.tags.span(
+                'DateTime',
+                class_='badge column-datetime me-2',
+            ),
+        ]
+
+        if is_long:
+            badges.extend(
+                [
+                    ui.tags.span(
+                        'Analyte Name',
+                        class_='badge column-analyte-name me-2',
+                    ),
+                    ui.tags.span(
+                        'Analyte Value',
+                        class_='badge column-analyte-value me-2',
+                    ),
+                ]
+            )
+        else:
+            badges.append(
+                ui.tags.span(
+                    'Analyte',
+                    class_='badge column-analyte me-2',
+                )
+            )
+
+        return ui.div(
+            ui.tags.span(
+                'Column color key:',
+                class_='me-2 text-muted small',
+            ),
+            *badges,
+            class_='mb-3',
+        )
+
+    # TODO: old stuff
     # Functions related to station ID column
 
     # Helper: col ID from schema
@@ -146,7 +334,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         if sch is None:
             return None
         return getattr(sch, 'station_id_column', None)
-    
+
     # Helper: guess col ID based on station-like keywords
     def _guess_station_col(df: pd.DataFrame) -> str | None:
         if df is None or df.empty:
@@ -163,7 +351,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
             return None
 
         return candidates[0]
-    
+
     # Default station column
     def _default_station_col(file_obj) -> str | None:
         df = getattr(file_obj, 'df', None)
@@ -177,7 +365,17 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
         # if not in schema (or none selected), based on col names
         return _guess_station_col(df)
-    
+
+    @reactive.effect
+    def update_check_date_selector():
+        req(selected_file := input.sel_files_check())
+        file_obj = user_state().get_file(selected_file)
+        ui.update_select(
+            'sel_check_date',
+            choices=file_obj.date_cols,
+            selected=file_obj.last_selected_x_col,
+        )
+
     @reactive.effect
     def update_station_col_selector():
         req(selected_file := input.sel_files_check())
@@ -195,17 +393,9 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
             selected = prev
         else:
             selected = _default_station_col(file_obj) or ''
-            setattr(file_obj, 'last_selected_station_col', selected)
+            file_obj.last_selected_station_col = selected
 
         ui.update_select('sel_station_col', choices=choices, selected=selected)
-
-    # track selected col during app use
-    @reactive.effect
-    def track_selected_station_col():
-        req(selected_file := input.sel_files_check())
-        col = input.sel_station_col()
-        file_obj = user_state().get_file(selected_file)
-        setattr(file_obj, 'last_selected_station_col', col)
 
     # determine current station from either schema or selected column
     # will only return one value; assumption is multiple stations are not (supposed to be) in file
@@ -253,53 +443,69 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
             return util.danger(f'Station column has {len(vals)} unique values. Only the first ({vals[0]}) will be used.')
         return None
 
+    # validate tests aren't missing params
+    def validate_test_parameters(test_list):
+        incomplete = set()
+
+        method_to_test = {
+            method_key: test_key
+            for test_key, test_info in od.OD_TESTS.items()
+            for method_key in test_info['methods']
+        }
+
+        for method_key, analyte, _, kwargs in test_list:
+            method_info = od.OD_IMPLEMENTED[method_key]
+
+            for arg_id, *_ in method_info.get('args', ()):
+                value = kwargs.get(arg_id)
+
+                if value is None or pd.isna(value):
+                    test_key = method_to_test[method_key]
+                    test_name = od.OD_TESTS[test_key]['label']
+                    incomplete.add((analyte, test_name))
+
+        return incomplete
 
     @reactive.effect
     @reactive.event(input.btn_od)
     @print_func_name()
     def do_outlier_detection():
         tests = user_selected_tests()
+
         if len(tests) == 0:
             util.show_warning('You need to select tests first')
             return
-
-        # persist remembered defaults
-        sid = current_station_id()
-        if sid and hasattr(tests, 'persist_station_defaults'):
-            tests.persist_station_defaults(sid, input)
 
         req(selected_file := input.sel_files_test())
         file_obj = user_state().get_file(selected_file)
 
         test_list = tests.get_test_list(input)
 
-        # The user will, at some point, select x and y columns to plot on the graph. We save
-        # these selected columns for the user's convenience. However, before this choice has
-        # been made, a default column will be selected in the selector - it will always be the
-        # first column, reading a file's columns left to right. In our context, this first
-        # column is often a station or sensor number, which is essentially useless to
-        # visualize.
-        #
-        # To make things slightly easier for the user, we instead save the first column which
-        # a test was selected on, since they're probably interested in visualizing it. Of
-        # course, if the user has already selected a column that was tested, we do not
-        # overwrite that saved column.
-        test_cols = [test_col for _, test_col, _ in test_list]
-        if file_obj.last_selected_x_col not in test_cols:
-            for test_col in test_cols:
-                if test_col in file_obj.date_cols:
-                    file_obj.last_selected_x_col = test_col
-                    _update_x_cols(file_obj)
-                    break
+        incomplete = validate_test_parameters(test_list)
 
-        if file_obj.last_selected_y_col not in test_cols:
-            for test_col in test_cols:
-                if test_col in file_obj.num_cols:
-                    file_obj.last_selected_y_col = test_col
-                    _update_y_cols(file_obj)
-                    break
+        if incomplete:
+            util.show_error(
+                f'{len(incomplete)} test configuration(s) have missing required settings. '
+                'Complete all required fields before running tests.'
+            )
+            return
 
-        # Finally, actually run the outlier detection
+        # persist remembered defaults only after validation succeeds
+        sid = current_station_id()
+
+        if sid and hasattr(tests, 'persist_station_defaults'):
+            tests.persist_station_defaults(sid, input)
+
+        # Keep the Review tab focused on an analyte that was actually tested.
+        test_analytes = [analyte for _, analyte, _, _ in test_list]
+
+        if file_obj.last_selected_y_col not in test_analytes:
+            for analyte in test_analytes:
+                file_obj.last_selected_y_col = analyte
+                _update_x_and_y_cols(file_obj)
+                break
+
+        # Run the selected outlier tests.
         od_task.invoke(test_list, file_obj)
 
     # Display data table in "Check" tab
@@ -312,23 +518,46 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         file_obj = user_state().get_file(selected_file)
         df = file_obj.df
 
-        # Don't show internal columns or any existing outlier flag columns
-        od_cols = od.get_all_od_names(df)
-        df = df[[c for c in df.columns if c not in m.INTERNAL_COLS and c not in od_cols]]
+        # Don't show internal columns. Outlier results no longer live on the
+        # dataframe, so there's nothing else to filter here.
+        df = df[[c for c in df.columns if c not in m.INTERNAL_COLS]]
 
-        station_col = input.sel_station_col()
+        format_info = confirmed_format()
+        req(format_info)
 
-        # Enable column header highlighting
+        station_col = format_info['station_col']
+        date_col = format_info['date_col']
+        is_long = format_info['is_long']
+
+        analyte_name_col = format_info['analyte_name_col']
+        analyte_value_col = format_info['analyte_value_col']
+        analyte_cols = set(format_info['analyte_cols'])
+
         def mapper(col):
             if station_col and col == station_col:
                 return 'station'
-            if col in file_obj.date_cols:
+
+            if date_col and col == date_col:
                 return 'datetime'
-            if col in file_obj.num_cols:
-                return 'numeric'
+
+            if is_long:
+                if col == analyte_name_col:
+                    return 'analyte_name'
+
+                if col == analyte_value_col:
+                    return 'analyte_value'
+
+            elif col in analyte_cols:
+                return 'analyte'
+
             return None
 
-        asyncio.create_task(label_columns(list(df.columns.map(mapper))))
+        asyncio.create_task(
+            label_columns(
+                list(df.columns.map(mapper))
+            )
+        )
+
         return df
 
     # This function updates our reactive dataframes so that when outlier detection
@@ -363,112 +592,496 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         req(df := results_df())
         return df
 
-    # TODO: update this when flagging happens
+    # Kept for compatibility with any older UI that still references this output.
     @render.data_frame
     @reactive.calc
     def od_results_table_viz():
         req(df := results_df())
-        return df
+        req(analyte := input.sel_review_analyte())
 
-    # Generate the data we will let the user download. To do so, we filter out
-    # some columns and apply light transformations to outlier detection results.
+        if 'Analyte' in df.columns:
+            df = df[df['Analyte'] == analyte]
+
+        keep_cols = [
+            col
+            for col in ('Analyte', 'Test name', 'Data points that failed')
+            if col in df.columns
+        ]
+
+        return df[keep_cols] if keep_cols else df
+
+    @render.ui
+    def review_test_summary():
+        results_df()
+
+        req(selected_file := input.sel_files_viz())
+        req(analyte := input.sel_review_analyte())
+
+        file_obj = user_state().get_file(selected_file)
+
+        method_to_test = {
+            method_key: test_key
+            for test_key, test_info in od.OD_TESTS.items()
+            for method_key in test_info['methods']
+        }
+
+        failed_by_test = {}
+
+        for (result_analyte, method_key), entry in file_obj.od_results.items():
+            if result_analyte != analyte or entry['error'] is not None:
+                continue
+
+            test_key = method_to_test.get(method_key)
+            if test_key is None:
+                continue
+
+            result = entry['result']
+            if result is None:
+                continue
+
+            result = result.fillna(False).astype(bool)
+            failed_by_test.setdefault(test_key, set()).update(
+                result[result].index.tolist()
+            )
+
+        if not failed_by_test:
+            return ui.p(
+                'No test results for this analyte.',
+                class_='text-muted small',
+            )
+
+        rows = []
+        for test_key, test_info in od.OD_TESTS.items():
+            if test_key not in failed_by_test:
+                continue
+
+            rows.append(
+                ui.tags.tr(
+                    ui.tags.td(
+                        test_info['label'],
+                        class_='text-center',
+                    ),
+                    ui.tags.td(
+                        len(failed_by_test[test_key]),
+                        class_='text-center',
+                    ),
+                )
+            )
+
+        return ui.tags.table(
+            ui.tags.thead(
+                ui.tags.tr(
+                    ui.tags.th(
+                        'Test',
+                        class_='fw-semibold bg-light',
+                        style='text-align: center !important;',
+                    ),
+                    ui.tags.th(
+                        'Failed points',
+                        class_='fw-semibold bg-light',
+                        style='text-align: center !important;',
+                    ),
+                )
+            ),
+            ui.tags.tbody(*rows),
+            class_='table table-sm table-bordered mb-0',
+        )
+
+    # Build the frame the user downloads: the original data plus one column per
+    # test result, flattened out of file_obj.od_results.
     #
-    # TODO: update this when flagging happens
-    def get_export_df(df, options):
-        # Filter out internal/unwanted columns
-        ignore_cols = []
-        ignore_cols.extend(m.INTERNAL_COLS)
+    # Wide files get one column per analyte+test ("PH_failed_z_score_test") since
+    # each analyte is its own column. Long files get one column per test, filled at
+    # the rows belonging to each analyte, because the analyte column already
+    # distinguishes them.
+    def get_export_df(file_obj):
+        df = file_obj.df.copy(deep=False)
 
-        od_cols = od.get_all_od_names(df)
-        if 'include_passing_cols' not in options:
-            ignore_cols.extend(col for col in od_cols if df[col].sum() == 0)
+        method_to_test = {
+            method_key: test_key
+            for test_key, test_info in od.OD_TESTS.items()
+            for method_key in test_info['methods']
+        }
 
-        df = df[[c for c in df.columns if c not in ignore_cols]]
+        def result_label(method_key):
+            if method_key == 'time_gap_test':
+                return 'Missing data before this point'
 
-        # Loop through any remaining outlier test columns and convert them from true/false
-        # to something more easily interpreted
-        with pd.option_context('mode.chained_assignment', None):  # ignore warning
-            for c in df.columns:
-                if c in od_cols:
-                    df[c] = df[c].map(
-                        {
-                            False: np.nan,
-                            True: 'failed',
-                        }
+            if method_key == 'value_gap_test':
+                return 'Missing value'
+
+            test_key = method_to_test.get(method_key)
+
+            if test_key is not None:
+                return od.OD_TESTS[test_key]['label']
+
+            return od.OD_IMPLEMENTED.get(
+                method_key,
+                {},
+            ).get(
+                'plain',
+                method_key,
+            )
+
+        def outlier_col(analyte):
+            if file_obj.is_long:
+                return 'outlier'
+
+            return f'{analyte}_outlier'
+
+        def add_result(
+            analyte,
+            indices,
+            label,
+        ):
+            col = outlier_col(analyte)
+
+            indices = df.index.intersection(
+                indices
+            )
+
+            if len(indices) == 0:
+                return
+
+            current = (
+                df.loc[indices, col]
+                .fillna('')
+                .astype(str)
+            )
+
+            df.loc[indices, col] = np.where(
+                current.eq(''),
+                label,
+                current + '; ' + label,
+            )
+
+        # Create the final outlier columns.
+        if file_obj.is_long:
+            df['outlier'] = ''
+        else:
+            for analyte in file_obj.get_analyte_names():
+                df[f'{analyte}_outlier'] = ''
+
+        # Add automated test results.
+        for (
+            analyte,
+            method_key,
+        ), entry in file_obj.od_results.items():
+            if (
+                entry['error'] is not None
+                or entry['result'] is None
+            ):
+                continue
+
+            result = (
+                entry['result']
+                .fillna(False)
+                .astype(bool)
+            )
+
+            # Respect flags that the user manually cleared
+            # during Review.
+            overrides = file_obj.get_flag_overrides(
+                analyte
+            )
+
+            if overrides:
+                result = (
+                    result
+                    & ~result.index.isin(
+                        list(overrides)
                     )
-        return df
+                )
+
+            failed_indices = result[
+                result
+            ].index
+
+            add_result(
+                analyte,
+                failed_indices,
+                result_label(method_key),
+            )
+
+        # Add points manually flagged during Review.
+        for analyte, indices in file_obj.manual_flags.items():
+            if not indices:
+                continue
+
+            add_result(
+                analyte,
+                indices,
+                'Manually flagged',
+            )
+
+        return df[
+            [
+                col
+                for col in df.columns
+                if col not in m.INTERNAL_COLS
+            ]
+        ]
+
 
     @render.data_frame
     @print_func_name('green')
     def export_table():
         req(selected_file := input.sel_files_export())
+
         file_obj = user_state().get_file(selected_file)
 
-        selected_export_options = input.export_settings()
+        df = get_export_df(file_obj)
 
-        df = get_export_df(file_obj.df, selected_export_options)
+        selected_export_options = (input.export_settings())
 
-        # The render function doesn't allow us to disable the header so we have to
-        # do it manually.
-        if 'include_header' not in selected_export_options:
-            asyncio.create_task(remove_export_header())
+        if (
+            'include_header'
+            not in selected_export_options
+        ):
+            asyncio.create_task(
+                remove_export_header()
+            )
 
         return df
+
+    def _pair_long_review_data(
+        file_obj: app_state.File,
+        y_analyte: str,
+        x_analyte: str,
+    ):
+        df = file_obj.df
+        date_col = file_obj.last_selected_x_col
+        station_col = getattr(file_obj, 'last_selected_station_col', '')
+        analyte_col = file_obj.analyte_col
+        value_col = file_obj.value_col
+
+        if not all([date_col, analyte_col, value_col]):
+            return {
+                'df': pd.DataFrame(),
+                'x_col': review_x_value_col,
+                'warning': None,
+                'error': 'The confirmed long-data format is incomplete.',
+            }
+
+        keys = [date_col]
+        if station_col:
+            keys.insert(0, station_col)
+
+        y_rows = df[df[analyte_col] == y_analyte].copy()
+        x_rows = df[df[analyte_col] == x_analyte].copy()
+
+        if y_rows.empty:
+            return {
+                'df': pd.DataFrame(),
+                'x_col': review_x_value_col,
+                'warning': None,
+                'error': f'No observations were found for {y_analyte}.',
+            }
+
+        y_complete_keys = y_rows.dropna(subset=keys)
+        x_complete_keys = x_rows.dropna(subset=keys)
+
+        y_duplicates = y_complete_keys.duplicated(subset=keys, keep=False)
+        x_duplicates = x_complete_keys.duplicated(subset=keys, keep=False)
+
+        if y_duplicates.any() or x_duplicates.any():
+            key_text = 'station/date-time' if station_col else 'date-time'
+            return {
+                'df': pd.DataFrame(),
+                'x_col': review_x_value_col,
+                'warning': None,
+                'error': (
+                    f'{x_analyte} cannot be plotted against {y_analyte} because '
+                    f'some {key_text} combinations contain multiple values for '
+                    'the same analyte.'
+                ),
+            }
+
+        y_keys = y_rows[[*keys]].copy()
+        y_keys['__review_row_index__'] = y_keys.index
+
+        x_values = x_complete_keys[[*keys, value_col]].rename(
+            columns={value_col: review_x_value_col}
+        )
+
+        paired = y_keys.merge(
+            x_values,
+            on=keys,
+            how='left',
+            validate='one_to_one',
+            sort=False,
+        ).set_index('__review_row_index__')
+
+        valid_y = y_rows[value_col].notna()
+        matched = valid_y & paired[review_x_value_col].notna()
+        n_total = int(valid_y.sum())
+        n_matched = int(matched.sum())
+
+        if n_matched == 0:
+            key_text = 'station and date/time' if station_col else 'date/time'
+            return {
+                'df': pd.DataFrame(),
+                'x_col': review_x_value_col,
+                'warning': None,
+                'error': (
+                    f'No {y_analyte} observations could be matched to '
+                    f'{x_analyte} by {key_text}.'
+                ),
+            }
+
+        warning = None
+        if n_matched < n_total:
+            key_text = 'station and date/time' if station_col else 'date/time'
+            warning = (
+                f'{n_matched} of {n_total} {y_analyte} observations could be '
+                f'matched to {x_analyte} by {key_text}. Unmatched observations '
+                'are not shown in this plot.'
+            )
+
+        # Keep the original long dataframe shape so plot.py can apply its existing
+        # analyte mask. Only the reviewed-analyte rows receive an x value.
+        plot_df = df.copy()
+        plot_df[review_x_value_col] = np.nan
+        matched_indices = paired.index[matched]
+        plot_df.loc[matched_indices, review_x_value_col] = paired.loc[
+            matched_indices,
+            review_x_value_col,
+        ]
+
+        return {
+            'df': plot_df,
+            'x_col': review_x_value_col,
+            'warning': warning,
+            'error': None,
+        }
+
+    @reactive.calc
+    def review_plot_info():
+        req(selected_file := input.sel_files_viz())
+        req(y_analyte := input.sel_review_analyte())
+        req(plot_against := input.sel_review_against())
+
+        file_obj = user_state().get_file(selected_file)
+        analytes = file_obj.get_analyte_names()
+
+        if y_analyte not in analytes:
+            return {
+                'df': pd.DataFrame(),
+                'x_col': '',
+                'warning': None,
+                'error': f'{y_analyte} is not a defined analyte.',
+            }
+
+        if plot_against == review_date:
+            date_col = file_obj.last_selected_x_col
+            if not date_col:
+                return {
+                    'df': pd.DataFrame(),
+                    'x_col': '',
+                    'warning': None,
+                    'error': 'No confirmed date column is available.',
+                }
+
+            return {
+                'df': file_obj.df,
+                'x_col': date_col,
+                'warning': None,
+                'error': None,
+            }
+
+        if plot_against not in analytes:
+            return {
+                'df': pd.DataFrame(),
+                'x_col': '',
+                'warning': None,
+                'error': f'{plot_against} is not a defined analyte.',
+            }
+
+        if not file_obj.is_long:
+            return {
+                'df': file_obj.df,
+                'x_col': plot_against,
+                'warning': None,
+                'error': None,
+            }
+
+        return _pair_long_review_data(
+            file_obj,
+            y_analyte=y_analyte,
+            x_analyte=plot_against,
+        )
+
+    @render.ui
+    def review_plot_title():
+        req(analyte := input.sel_review_analyte())
+        req(plot_against := input.sel_review_against())
+        req(selected_file := input.sel_files_viz())
+
+        file_obj = user_state().get_file(selected_file)
+
+        if plot_against == review_date:
+            plot_against = file_obj.last_selected_x_col
+
+        return ui.div(
+            f'{analyte} vs {plot_against}',
+            class_='h5 text-center mb-3',
+        )
+
+    @render.ui
+    def review_match_message():
+        info = review_plot_info()
+
+        if info['error']:
+            return ui.div(
+                info['error'],
+                class_='alert alert-danger py-2 mb-3',
+            )
+
+        if info['warning']:
+            return ui.div(
+                info['warning'],
+                class_='alert alert-warning py-2 mb-3',
+            )
+
+        return None
 
     @render_widget
     @print_func_name
     def plot_data():
-        req(df := active_df())
+        active_df()
 
-        x_col = input.sel_x()
-        y_col = input.sel_y()
+        info = review_plot_info()
 
-        if df.empty or not all([x_col, y_col]):
+        if info['error'] or info['df'].empty:
             return px.scatter()
 
-        # This happens when the file input value has been changed but the change
-        # hasn't propagated to the inputs yet
-        if x_col not in df or y_col not in df:
-            req(False)  # returning None will wipe out the graph
-
         req(selected_file := input.sel_files_viz())
-        schema = user_state().get_file(selected_file).schema
+        req(analyte := input.sel_review_analyte())
+        file_obj = user_state().get_file(selected_file)
 
-        return plot.plot_data(df, x_col, y_col, schema, plot_state)
+        return plot.plot_data(
+            info['df'],
+            info['x_col'],
+            analyte,
+            file_obj.schema,
+            plot_state,
+            file_obj=file_obj,
+        )
 
-    def set_flags(indices: list, cols: list[str], value: bool | list[bool]) -> None:
-        """
-        Updates the manual flags of the active dataframe. The whole dataframe won't be
-        updated, just the relevant rows and columns specified by "indices" and "cols",
-        respectively.
-
-        Parameters
-        ----------
-        indices : list
-            A list of index values belonging to the input dataframe to apply "value" to.
-        cols : list
-            List of columns to apply "value" to.
-        value : bool or list of bools
-            The value(s) we want to set our dataframe's selected rows/columns to.
-        """
-
-        req(selected_file := input.sel_files_viz())
-
-        # We don't want this function to execute when active_df is changed
-        with reactive.isolate():
-            df = active_df()
-
-        # This makes use of pandas' overloaded assignment function, allowing a
-        # single value or list of values.
-        df.loc[indices, cols] = value
+    # Manual flags and overrides live on the File, not as columns, so writing them
+    # is just a state swap followed by a nudge to the reactive dataframe.
+    def _commit_flag_state(file_obj, analyte, state):
+        file_obj.set_flag_state(analyte, state)
 
         # See comment in do_outlier_detection function
-        dfcp = df.copy(deep=False)
-        user_state().get_file(selected_file).df = dfcp
+        dfcp = file_obj.df.copy(deep=False)
+        file_obj.df = dfcp
         active_df.set(dfcp)
 
+        invalidate_file_selector('sel_files_export')
+
     # Manually flag/unflag data points via toggle
-    def manual_flag(value: bool | None) -> None:
+    def manual_flag() -> None:
         selected_points = plot_state.get_selected_points()
         if len(selected_points) == 0:
             util.show_warning(
@@ -476,108 +1089,47 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
             )
             return
 
+        req(selected_file := input.sel_files_viz())
+        file_obj = user_state().get_file(selected_file)
+
+        with reactive.isolate():
+            analyte = input.sel_review_analyte()
+
+        req(analyte)
+
         # normalize indices
         selected_points = np.unique(np.asarray(selected_points, dtype=int))
 
-        with reactive.isolate():
-            df = active_df()
-            y_col = input.sel_y()
+        # Points a test currently flags. Needed so the toggle can tell "clear this
+        # test result for this point" apart from "add a manual flag".
+        test_flagged = set()
+        for entry in file_obj.get_od_results_for(analyte).values():
+            if entry['error'] is not None or entry['result'] is None:
+                continue
+            result = entry['result'].fillna(False).astype(bool)
+            test_flagged.update(result[result].index.tolist())
 
-        manual_y_col = od.get_manual_col(y_col)
+        prev_state = file_obj.get_flag_state(analyte)
 
-        if manual_y_col not in df:
-            df[manual_y_col] = False  # initialize column
+        file_obj.toggle_flag(analyte, selected_points, test_flagged)
 
-        # cache original test-flags so a later toggle can restore them
-        if not hasattr(plot_state, 'saved_test_flags'):
-            plot_state.saved_test_flags = {}  # (y_col, idx) -> list[str]
+        new_state = file_obj.get_flag_state(analyte)
 
-        # toggle mode
-        if value is None:
-            od_cols = od.get_od_names(df, y_col)
-            if manual_y_col not in od_cols:
-                od_cols = [manual_y_col, *od_cols]
+        # save previous data to enable undos
+        plot_state.add_undo(analyte, prev_state, new_state)
+        emphasize_undo_button()
 
-            test_cols = [c for c in od_cols if c != manual_y_col]
+        # wipe out any possible redos
+        plot_state.reset_redo()
+        unemphasize_redo_button()
 
-            prev_values = df.loc[selected_points, od_cols].copy()
-            new_df = prev_values.copy()
-
-            # identify whether each point is currently flagged by at least one (not manual) test
-            if test_cols:
-                test_flagged = (
-                    df.loc[selected_points, test_cols]
-                    .fillna(False)
-                    .astype(bool)
-                    .any(axis=1)
-                )
-            else:
-                test_flagged = pd.Series(False, index=selected_points)
-
-            for idx in selected_points:
-                key = (y_col, int(idx))
-
-                if bool(test_flagged.loc[idx]):
-                    # flagged by at least one test:
-                    # clear all flags, but remember which tests were true
-                    flagged_tests = (
-                        df.loc[idx, test_cols]
-                        .fillna(False)
-                        .astype(bool)
-                    )
-                    plot_state.saved_test_flags[key] = flagged_tests[flagged_tests].index.tolist()
-
-                    new_df.loc[idx, od_cols] = False
-
-                else:
-                    # currently not test-flagged:
-                    # if saved tests exist, restore them; otherwise, toggle manual flag
-                    saved = plot_state.saved_test_flags.get(key, [])
-                    saved = [c for c in saved if c in df.columns and c in od_cols]
-
-                    if saved:
-                        new_df.loc[idx, od_cols] = False
-                        new_df.loc[idx, saved] = True
-                        new_df.loc[idx, manual_y_col] = False
-                    else:
-                        cur_manual = bool(df.loc[idx, manual_y_col]) if manual_y_col in df else False
-                        new_df.loc[idx, manual_y_col] = not cur_manual
-
-            # build new_values for undo/redo buttons
-            if len(od_cols) == 1:
-                new_values = [bool(new_df.loc[i, od_cols[0]]) for i in selected_points]
-            else:
-                new_values = [tuple(new_df.loc[i, od_cols].tolist()) for i in selected_points]
-
-            # save previous data to enable undos
-            plot_state.add_undo(selected_points, od_cols, prev_values, new_values)
-            emphasize_undo_button()
-
-            # wipe out any possible redos
-            plot_state.reset_redo()
-            unemphasize_redo_button()
-
-            # apply changes
-            for col in od_cols:
-                prev_col = prev_values[col].fillna(False).astype(bool).to_numpy()
-                next_col = new_df[col].fillna(False).astype(bool).to_numpy()
-
-                idx_on = selected_points[(~prev_col) & (next_col)]
-                idx_off = selected_points[(prev_col) & (~next_col)]
-
-                if len(idx_on) > 0:
-                    set_flags(idx_on, [col], True)
-                if len(idx_off) > 0:
-                    set_flags(idx_off, [col], False)
-
-            invalidate_file_selector('sel_files_export')
-            return
+        _commit_flag_state(file_obj, analyte, new_state)
 
     @reactive.effect
     @reactive.event(input.btn_toggle_flag)
     def toggle_flag():
         try:
-            manual_flag(None)
+            manual_flag()
             reset_graph_selection()
         except Exception as e:
             if not isinstance(e, SilentException):
@@ -591,7 +1143,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
     @reactive.event(input.btn_undo_flag)
     def undo_flag():
         try:
-            sel, cols, prev = plot_state.undo()
+            analyte, prev_state = plot_state.undo()
         except IndexError:  # nothing to undo
             return
 
@@ -600,13 +1152,14 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         if plot_state.undo_stack_is_empty():
             unemphasize_undo_button()
 
-        set_flags(sel, cols, prev)
+        req(selected_file := input.sel_files_viz())
+        _commit_flag_state(user_state().get_file(selected_file), analyte, prev_state)
 
     @reactive.effect
     @reactive.event(input.btn_redo_flag)
     def redo_flag():
         try:
-            sel, cols, curr = plot_state.redo()
+            analyte, new_state = plot_state.redo()
         except IndexError:  # nothing to redo
             return
 
@@ -615,7 +1168,8 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         if plot_state.redo_stack_is_empty():
             unemphasize_redo_button()
 
-        set_flags(sel, cols, curr)
+        req(selected_file := input.sel_files_viz())
+        _commit_flag_state(user_state().get_file(selected_file), analyte, new_state)
 
     def reset_flag_stacks():
         plot_state.reset_stacks()
@@ -635,10 +1189,10 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         reset_manual_flag_objects()
 
     @reactive.effect
-    def react_to_new_plot_cols():
-        sel_x = input.sel_x()
-        sel_y = input.sel_y()
-        req(sel_x or sel_y)
+    def react_to_new_plot_settings():
+        analyte = input.sel_review_analyte()
+        plot_against = input.sel_review_against()
+        req(analyte and plot_against)
         reset_manual_flag_objects()
         plot_state.reset_zoom()
 
@@ -655,17 +1209,20 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         asyncio.create_task(update_button_class('btn_redo_flag', 'btn-info', 'btn-light'))
 
     def emphasize_run_tests_button():
-        asyncio.create_task(update_button_class('btn_od', 'btn-light', 'btn-info'))
+        asyncio.create_task(update_button_class('btn_od', 'btn-light', 'btn-primary'))
 
     def unemphasize_run_tests_button():
-        asyncio.create_task(update_button_class('btn_od', 'btn-info', 'btn-light'))
+        asyncio.create_task(update_button_class('btn_od', 'btn-primary', 'btn-light'))
 
     def _initialize_test_ui(file_obj):
+        is_long = getattr(file_obj, 'is_long', False)
         test_setup_info.set(
             {
                 'x_columns': file_obj.date_cols,
                 'y_columns': file_obj.num_cols,
-                'tests': od.OD_IMPLEMENTED,
+                'tests': od.OD_TESTS,
+                'is_long': is_long,
+                'analytes': file_obj.get_analytes() if is_long else [],
             }
         )
 
@@ -691,46 +1248,47 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
     @reactive.effect
     @reactive.event(input.btn_test_move)
     def set_up_tests():
-        selected_x_cols = input.x_boxes()
-        selected_y_cols = input.y_boxes()
-        selected_tests = input.test_boxes()
+        req(selected_file := input.sel_files_test())
+        file_obj = user_state().get_file(selected_file)
 
-        # Validate input: one+ test must be selected
+        selected_date = file_obj.last_selected_x_col
+        selected_analytes = list(input.sel_test_analyte() or [])
+
+        selected_tests = [
+            *(input.chk_tests_value() or []),
+            *(input.chk_tests_sequential() or []),
+        ]
+
         if not selected_tests:
-            util.show_warning('At least one test must be selected')
+            util.show_error('At least one test must be selected')
             return
 
-        if not selected_x_cols and not selected_y_cols:
-            util.show_warning('At least one column must be selected')
+        if not selected_analytes:
+            util.show_error('At least one analyte must be selected')
             return
 
-        # Validate input: one+ data/numeric column must be selected if any selected test
-        # requires one.
         for test_key in selected_tests:
-            if not selected_y_cols and od.OD_IMPLEMENTED[test_key]['ts_col_type'] == 'y':
-                plain_name = od.OD_IMPLEMENTED[test_key]['plain'].lower()
-                util.show_warning(f'The {plain_name} requires a numeric column to be selected')
-                return
-            if not selected_x_cols and od.OD_IMPLEMENTED[test_key]['ts_col_type'] == 'x':
-                plain_name = od.OD_IMPLEMENTED[test_key]['plain'].lower()
-                util.show_warning(f'The {plain_name} requires a date column to be selected')
+            test_info = od.OD_TESTS[test_key]
+
+            if test_info.get('needs_date') and not selected_date:
+                util.show_error(
+                    f'The {test_info["label"].lower()} test requires a date column to be selected'
+                )
                 return
 
         tests = user_selected_tests()
         added = 0
+
         for test_key in selected_tests:
-            test_type = od.OD_IMPLEMENTED[test_key]['ts_col_type']
+            for analyte in selected_analytes:
+                value_col = file_obj.value_col if file_obj.is_long else analyte
 
-            # We allow the user to select invalid combinations of tests and columns,
-            # here is where we filter those out.
-            valid_cols = []
-            if 'x' in test_type:
-                valid_cols.extend(selected_x_cols)
-            if 'y' in test_type:
-                valid_cols.extend(selected_y_cols)
-
-            for test_col in valid_cols:
-                added += tests.add(test_key=test_key, test_col=test_col)
+                added += tests.add(
+                    test_key=test_key,
+                    test_col=value_col,
+                    analyte=analyte,
+                    date_col=selected_date or '',
+                )
 
         if added == 0:
             util.show_info('No additional tests were added (duplicates were filtered)')
@@ -739,7 +1297,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         if len(tests) > 0:
             emphasize_run_tests_button()
 
-        user_selected_tests.set(tests.copy())  # force ui update
+        user_selected_tests.set(tests.copy())
 
     @reactive.effect
     @reactive.event(input.accordion_trash_icon_clicked)
@@ -759,15 +1317,30 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
     @render.ui
     def test_setup_right():
         tests = user_selected_tests()
-        sid = current_station_id() # for default persistence
-        # Set up accordion objects
-        return ui.panel_well(tests.get_ui(input, station_id=sid))
 
-    @reactive.effect
-    @reactive.event(input.btn_test_help)
-    def show_test_help_modal():
-        ui.modal_show(app_ui.test_help_modal())
+        if len(tests) == 0:
+            return ui.p(
+                'No tests selected yet.',
+                class_='text-muted',
+            )
 
+        sid = current_station_id()  # for default persistence
+
+        return ui.div(
+            ui.div(
+                'Configure selected tests',
+                class_='h5 border-bottom pb-2 mb-3',
+            ),
+            ui.div(
+                tests.get_ui(
+                    input,
+                    station_id=sid,
+                ),
+                class_='border rounded p-3 bg-light',
+            ),
+        )
+
+    # Update button class
     async def update_button_class(id, rm, add):
         await session.send_custom_message(
             'update_btn_class',
@@ -816,9 +1389,21 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
     @render.ui
     def show_download_button():
+        return ui.download_button(
+            'download_data',
+            'Download file',
+            class_='btn-primary',
+            style='width: 100%;',
+        )
+
+    @render.ui
+    def export_filename():
         fname = get_export_file_name()
-        jlog(fname)
-        return ui.download_button('download_data', fname, class_='btn-primary')
+
+        return ui.div(
+            fname,
+            class_='text-muted small text-center mt-2',
+        )
 
     @render.download(filename=get_export_file_name)
     async def download_data(chunk_size=8192):
@@ -830,7 +1415,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
         header = 'include_header' in selected_export_options
 
-        df = get_export_df(file_obj.df, selected_export_options)
+        df = get_export_df(file_obj)
 
         if selected_ext == '.xlsx':
             buffer = BytesIO()
@@ -862,5 +1447,311 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         for curr_selector in selectors
     ]
 
+    @render.ui
+    def analyte_selects():
+        req(selected_file := input.sel_files_check())
+        try:
+            file_obj = user_state().get_file(selected_file)
+        except KeyError:
+            return None
+
+        df = file_obj.df
+        if df is None or df.empty:
+            return None
+
+        is_long = input.radio_data_shape() == 'long'
+        return app_ui._analyte_selects(list(df.columns), file_obj.num_cols, is_long)
+
+    @render.ui
+    def data_shape_options():
+        req(input.file1())
+        return app_ui._data_shape_options()
+
+    @render.ui
+    def od_results_summary():
+        # Reactive dependency: this changes whenever test results are refreshed.
+        results_df()
+
+        req(selected_file := input.sel_files_test())
+        file_obj = user_state().get_file(selected_file)
+
+        if not file_obj.od_results:
+            return ui.p(
+                'No test results yet.',
+                class_='text-muted',
+            )
+
+        # Map each underlying method back to its user-facing test.
+        method_to_test = {
+            method_key: test_key
+            for test_key, test_info in od.OD_TESTS.items()
+            for method_key in test_info['methods']
+        }
+
+        # format params helper
+        def format_params(method_key, params):
+            arg_info = od.OD_IMPLEMENTED[method_key].get('args', ())
+            parts = []
+
+            for arg_id, arg_label, *_ in arg_info:
+                value = params.get(arg_id)
+
+                if value is not None:
+                    parts.append(f'{arg_label} = {value}')
+
+            return '; '.join(parts) if parts else '\u2014'
+
+        rows_by_analyte = {}
+
+        # Missing data is handled separately because its two methods should
+        # appear as one result with the union of their failed rows.
+        missing_results = {}
+
+        for (analyte, method_key), entry in file_obj.od_results.items():
+            if entry['error'] is not None:
+                continue
+
+            test_key = method_to_test.get(method_key)
+            if test_key is None:
+                continue
+
+            test_info = od.OD_TESTS[test_key]
+
+            if test_key == 'missing_data':
+                missing_results.setdefault(analyte, []).append(
+                    (method_key, entry)
+                )
+                continue
+
+            method_name = od.OD_IMPLEMENTED[method_key]['plain']
+
+            if test_info.get('method_choices'):
+                method_name = test_info['method_choices'].get(
+                    method_key,
+                    method_name,
+                )
+
+            result = entry['result'].fillna(False).astype(bool)
+            n_failed = int(result.sum())
+
+            rows_by_analyte.setdefault(analyte, []).append(
+                {
+                    'Test': test_info['label'],
+                    'Method': method_name,
+                    'Parameters': format_params(
+                        method_key,
+                        entry.get('params', {}),
+                    ),
+                    'n_failed': n_failed,
+                }
+            )
+
+        # Merge time-gap and value-gap failures into one Missing data row.
+        for analyte, entries in missing_results.items():
+            failed_indices = set()
+            parameter_parts = []
+
+            for method_key, entry in entries:
+                result = entry['result'].fillna(False).astype(bool)
+
+                failed_indices.update(
+                    result[result].index.tolist()
+                )
+
+                params = format_params(
+                    method_key,
+                    entry.get('params', {}),
+                )
+
+                if params != '\u2014':
+                    parameter_parts.append(params)
+
+            parameters = (
+                '; '.join(dict.fromkeys(parameter_parts))
+                if parameter_parts
+                else '\u2014'
+            )
+
+            rows_by_analyte.setdefault(analyte, []).append(
+                {
+                    'Test': od.OD_TESTS['missing_data']['label'],
+                    'Method': od.OD_TESTS['missing_data']['method_label'],
+                    'Parameters': parameters,
+                    'n_failed': len(failed_indices),
+                }
+            )
+
+        if not rows_by_analyte:
+            return ui.p(
+                'No test results yet.',
+                class_='text-muted',
+            )
+
+        sections = []
+
+        for analyte, rows in rows_by_analyte.items():
+            sections.append(
+                ui.div(
+                    ui.div(
+                        analyte,
+                        class_=(
+                            'fw-bold px-3 py-2 border-bottom '
+                            'bg-secondary-subtle text-center'
+                        ),
+                    ),
+                    ui.tags.table(
+                        ui.tags.thead(
+                            ui.tags.tr(
+                                ui.tags.th(
+                                    'Test',
+                                    class_='text-center fw-semibold',
+                                    style='width: 22%;',
+                                ),
+                                ui.tags.th(
+                                    'Method',
+                                    class_='text-center fw-semibold',
+                                    style='width: 25%;',
+                                ),
+                                ui.tags.th(
+                                    'Parameters',
+                                    class_='text-center fw-semibold',
+                                    style='width: 33%;',
+                                ),
+                                ui.tags.th(
+                                    '# of Failed Points',
+                                    class_='text-center fw-semibold',
+                                    style='width: 20%;',
+                                ),
+                                class_='table-light',
+                            )
+                        ),
+                        ui.tags.tbody(
+                            *[
+                                ui.tags.tr(
+                                    ui.tags.td(
+                                        row['Test'],
+                                        class_='text-center',
+                                    ),
+                                    ui.tags.td(
+                                        row['Method'],
+                                        class_='text-center',
+                                    ),
+                                    ui.tags.td(
+                                        row['Parameters'],
+                                        class_='text-center',
+                                    ),
+                                    ui.tags.td(
+                                        row['n_failed'],
+                                        class_='text-center',
+                                    ),
+                                )
+                                for row in rows
+                            ]
+                        ),
+                        class_=(
+                            'table table-sm table-bordered '
+                            'table-hover mb-0'
+                        ),
+                    ),
+                    class_='border rounded mb-3 overflow-hidden mx-auto',
+                    style='max-width: 1150px;',
+                )
+            )
+
+        return ui.div(*sections)
+
+    # Workflow requirements
+    def has_data():
+        selected_file = input.sel_files_check()
+
+        if not selected_file:
+            return False
+
+        try:
+            file_obj = user_state().get_file(selected_file)
+        except KeyError:
+            return False
+
+        return file_obj.df is not None and not file_obj.df.empty
+
+
+    def format_is_confirmed():
+        return has_data() and confirmed_format() is not None
+
+
+    def tests_have_run():
+        selected_file = input.sel_files_test()
+
+        if not selected_file:
+            return False
+
+        try:
+            file_obj = user_state().get_file(selected_file)
+        except KeyError:
+            return False
+
+        return bool(file_obj.od_results)
+
+
+    def can_define_format():
+        return has_data()
+
+
+    def can_test():
+        return has_data() and format_is_confirmed()
+
+
+    def can_review():
+        return can_test() and tests_have_run()
+
+
+    def can_export():
+        return can_test() and tests_have_run()
+
+
+    @reactive.effect
+    def enforce_workflow():
+        tab = input.navigation_bar()
+
+        if tab in {
+            '2. Define format',
+            '3. Test data',
+            '4. Review outliers',
+            '5. Export',
+        } and not has_data():
+            util.show_warning(
+                'Upload data before continuing.'
+            )
+            ui.update_navs(
+                'navigation_bar',
+                selected='1. Upload',
+            )
+            return
+
+        if tab in {
+            '3. Test data',
+            '4. Review outliers',
+            '5. Export',
+        } and not format_is_confirmed():
+            util.show_warning(
+                'Confirm the data format before continuing.'
+            )
+            ui.update_navs(
+                'navigation_bar',
+                selected='2. Define format',
+            )
+            return
+
+        if tab in {
+            '4. Review outliers',
+            '5. Export',
+        } and not tests_have_run():
+            util.show_warning(
+                'Run tests before continuing.'
+            )
+            ui.update_navs(
+                'navigation_bar',
+                selected='3. Test data',
+            )
 
 app = App(app_ui.app_ui, server, debug=False)

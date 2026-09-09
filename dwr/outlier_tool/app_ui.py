@@ -3,7 +3,7 @@ from htmltools import tags
 from shiny import ui
 from shinywidgets import output_widget
 
-from . import m, schema, upload_util, util
+from . import m, schema, upload_util, util, text
 
 
 # Returns names (ids) of file selectors managed by the UI.
@@ -16,10 +16,7 @@ def get_file_selector_names():
     ]
 
 
-# Load our icons into memory so we can put them inline later. It would be more
-# natural to serve them as an image but shiny doesn't seem to support simple file
-# serving, and we don't really want to have to call a render.image function, so
-# we do things manually.
+# Load our icons into memory so we can put them inline later.
 def load_icon(path, default=''):
     try:
         with open(path) as f:
@@ -33,155 +30,67 @@ def load_icon(path, default=''):
 box_svg = load_icon(m.DOTTED_BOX_ICON)
 trash_svg = load_icon(m.TRASH_ICON, default='X')
 
-
-def _test_setup_left(info: dict[str, list | dict]):
-    if not info or not info['y_columns']:
-        return ui.panel_well(
-            util.warning(
-                'No columns are available to test. You may need to upload a file with more numeric columns.'
-            )
+# Column 2 of the Check tab. Both shapes answer "where are the analytes",
+# just differently: wide names the columns, long names the column that holds
+# the names plus the column that holds the values.
+def _analyte_selects(
+    cols: list[str],
+    numeric_cols: list[str],
+    is_long: bool,
+):
+    if is_long:
+        return ui.TagList(
+            ui.input_select(
+                'sel_long_analyte_col',
+                ui.span(
+                    'Analyte Name column:',
+                    class_='fw-semibold',
+                ),
+                cols,
+                selected=upload_util.guess_col(
+                    cols,
+                    ('analyte', 'parameter', 'constituent', 'param'),
+                ),
+            ),
+            ui.input_select(
+                'sel_long_value_col',
+                ui.span(
+                    'Analyte Value column:',
+                    class_='fw-semibold',
+                ),
+                cols,
+                selected=upload_util.guess_col(
+                    cols,
+                    ('value', 'result', 'concentration', 'conc', 'reading'),
+                ),
+            ),
         )
 
-    # Set up element 1: checkbox list of date columns
-    x_columns = info['x_columns']
-    x_boxes = ui.input_checkbox_group(
-        'x_boxes',
-        '',
-        x_columns,
-    )
-
-    # Set up element 2: checkbox list of numeric columns
-    y_boxes = ui.input_checkbox_group(
-        'y_boxes',
-        '',
-        info['y_columns'],
-    )
-
-    # Set up element 3: checkbox list of tests
-    test_checkbox_dict = {}
-    for test_key, test_info in info['tests'].items():
-        plain_name = test_info['plain']
-        ts_col_type = test_info['ts_col_type']
-
-        if ts_col_type == 'x':
-            extra_text = ' (dates only)'
-        elif ts_col_type == 'y':
-            extra_text = ' (numeric only)'
-        else:
-            extra_text = ''
-        test_checkbox_dict[test_key] = f'{plain_name}{extra_text}'
-
-    test_boxes = ui.input_checkbox_group(
-        'test_boxes',
-        '',
-        test_checkbox_dict,
-    )
-
-    return ui.panel_well(
-        ui.row(
-            ui.column(
-                6,
-                ui.p('Date column(s):'),
-                x_boxes,
-                ui.p('Numeric column(s):'),
-                y_boxes,
-            ),
-            ui.column(
-                6,
-                ui.p(
-                    'Test(s):',
-                    ui.tooltip(
-                        ui.span('\u2139', id='test_tooltip'),
-                        'Click "Test descriptions" for information on each test',
-                    ),
-                ),
-                test_boxes,
-            ),
+    return ui.input_selectize(
+        'sel_wide_analyte_cols',
+        ui.span(
+            'Analyte column(s):',
+            class_='fw-semibold',
         ),
+        cols,
+        selected=numeric_cols,
+        multiple=True,
     )
 
-
-def test_help_modal():
-    return ui.modal(
-        ui.accordion(
-            ui.accordion_panel(
-                'Gross range test',
-                ui.div(
-                    ui.p(
-                        'The gross range test evaluates a column of numerical data against a minimum and/or maximum value. Values falling outside the minimum and maximum (not including the min/max themselves!) will be marked as failing.'
-                    ),
-                ),
-            ),
-            ui.accordion_panel(
-                'Time gap test',
-                ui.div(
-                    ui.p(
-                        'The time gap test evaluates a date column for gaps in its expected cadence. A cadence is a repeating sequence on the order of days, hours, or minutes.'
-                    ),
-                ),
-            ),
-            ui.accordion_panel(
-                'Value gap test',
-                ui.div(
-                    ui.p(
-                        'The value gap test simply tests for missing data in a column. This test requires no additional user input.'
-                    ),
-                ),
-            ),
-            ui.accordion_panel(
-                'Flat line test',
-                ui.div(
-                    ui.p(
-                        'The flat line test evaluates a column of data and marks repeated values as failing. The number of repetitions before failing can be configured. Failures apply to entire groups of repeated values, not just the first value that exceeds the repetition limit. Repeated missing values do not trigger failures.'
-                    ),
-                ),
-            ),
-            ui.accordion_panel(
-                'Z-score test',
-                ui.div(
-                    ui.p(
-                        'This test measures how many standard deviations a data point is from the mean of a dataset. Values beyond a threshold (typically ±3) are considered outliers, making it simple but sensitive to extreme values.'
-                    ),
-                ),
-            ),
-            ui.accordion_panel(
-                'Modified z-score test',
-                ui.div(
-                    ui.p(
-                        'Similar to the z score test, but it uses the median and median absolute deviation (MAD) instead of the mean and standard deviation. This makes it more robust to extreme values and better suited for data that may not be normally distributed.'
-                    ),
-                ),
-            ),
-            ui.accordion_panel(
-                'Tukey IQR test',
-                ui.div(
-                    ui.p(
-                        """This method looks at the middle 50% of the data (the interquartile range) and flags values that are far outside this range. It's a non-parametric test, meaning it doesn't assume any specific distribution, making it useful for skewed or irregular datasets."""
-                    ),
-                ),
-            ),
-            ui.accordion_panel(
-                'Spike detection test',
-                ui.div(
-                    ui.p(
-                        """This test identifies sudden, sharp changes in value—spikes—by comparing each point to its neighbors. It's typically used in time series or sequential data where a single, abrupt jump may indicate an anomaly."""
-                    ),
-                ),
-            ),
-            ui.accordion_panel(
-                'Rate of change test',
-                ui.div(
-                    ui.p(
-                        'This test examines the difference between consecutive data points to identify values where the rate of change is unusually high compared to the typical change in the data. It helps find outliers that represent abrupt shifts or movements.'
-                    ),
-                ),
-            ),
-            open=False,
+def _data_shape_options():
+    return ui.input_radio_buttons(
+        'radio_data_shape',
+        ui.div(
+            'How are analyte values listed?',
+            class_='fw-semibold',
+            style='padding-bottom: 6px;',
         ),
-        easy_close=True,
-        size='l',
+        {
+            'wide': 'Separate columns (wide format)',
+            'long': 'One column (long format)',
+        },
+        selected=None,
     )
-
 
 def show_upload_options():
     return ui.div(
@@ -198,305 +107,494 @@ def show_upload_options():
         ),
         ui.output_ui('show_rows_to_skip'),
         id='upload_options',
+        class_='mt-3',
     )
 
+
+# `info` carries:
+#   'tests'      -> dict of available tests
+#   'x_columns'  -> candidate date columns
+#   'y_columns'  -> candidate numeric columns (wide mode)
+#   'is_long'    -> bool, True when the uploaded file is in long format
+#   'analytes'   -> unique values from the analyte column (long mode)
+def _test_setup_left(info: dict[str, list | dict]):
+    if not info:
+        return ui.panel_well(util.warning(text.WARN_NO_DATA))
+
+    is_long = info.get('is_long', False)
+
+    if is_long:
+        analyte_choices = info.get('analytes') or []
+        if not analyte_choices:
+            return ui.panel_well(util.warning(text.WARN_NO_ANALYTES))
+    else:
+        analyte_choices = info['y_columns']
+        if not analyte_choices:
+            return ui.panel_well(util.warning(text.WARN_NO_NUMERIC_COLS))
+
+    test_groups = {group: {} for group in text.TEST_GROUP_INFO}
+
+    for test_key, test_info in info['tests'].items():
+        group = test_info.get('group', text.DEFAULT_TEST_GROUP)
+        label = test_info['label']
+        desc = test_info.get('desc')
+        if desc:
+            label = upload_util.checkbox_with_help(label, desc)
+        test_groups[group][test_key] = label
+
+    def test_section(
+        title: str,
+        description: str,
+        input_id: str,
+        choices: dict,
+    ):
+        return ui.div(
+            ui.div(
+                title,
+                class_='fw-semibold mb-1',
+            ),
+            ui.p(
+                description,
+                class_='text-muted small mb-2',
+            ),
+            ui.div(
+                style='height: 8px;',
+            ),
+            ui.input_checkbox_group(
+                input_id,
+                '',
+                choices,
+            ),
+            class_='mb-4',
+        )
+
+    return ui.div(
+        ui.div(
+            'Choose tests',
+            class_='h5 border-bottom pb-2 mb-3',
+        ),
+
+        ui.div(
+            'Select Analyte(s):',
+            class_='fw-semibold mb-1',
+        ),
+        ui.input_selectize(
+            'sel_test_analyte',
+            None,
+            analyte_choices,
+            selected=analyte_choices,
+            multiple=True,
+        ),
+
+        *[
+            test_section(
+                title,
+                description,
+                f'chk_tests_{group}',
+                test_groups[group],
+            )
+            for group, (title, description) in text.TEST_GROUP_INFO.items()
+            if group != 'comparison'
+        ],
+    )
 
 app_ui = ui.page_sidebar(
     ui.sidebar(
         shinyswatch.theme_picker_ui(),
+        id='theme_sidebar',
         open='closed',
+        title='Appearance',
     ),
     ui.head_content(tags.link(rel='icon', href=m.FAVICON_URL, type='image/x-icon')),
     ui.navset_pill(
         ui.nav_panel(
-            '1. Import',
-            ui.row(
-                tags.h4('DWR outlier tool', class_='tab-title'),
-            ),
-            ui.row(
-                ui.column(
-                    4,
-                    ui.panel_well(
-                        ui.row(
-                            ui.input_select(
-                                'sel_file_format',
-                                'Optional file format (see description \u2192):',
-                                [m.NO_FF, *schema.get_all_schema_names()],
-                            ),
-                        ),
-                        ui.row(
-                            ui.input_file('file1', 'Import a file:', multiple=False),
-                        ),
-                        ui.row(
-                            ui.output_ui('upload_options'),
-                        ),
-                        id='upload_well',
-                    ),
-                ),
-                ui.column(
-                    4,
-                    ui.panel_well(
-                        tags.h5('File formats'),
-                        ui.p("""If your data is in a format that we don't natively support,
-                                        choosing a file format can let us know how to parse your data.
-                                        Make sure your uploaded file matches the selected format to
-                                        prevent issues.
-                                """),
-                        ui.hr(),
-                        ui.output_ui('file_format_info'),
-                        style='height: 100%;',
-                    ),
-                ),
-                ui.column(
-                    4,
-                    ui.panel_well(
-                        tags.h5('About this tool'),
-                        tags.ul(
-                            tags.li('Analyzes dates (x-axis) and numeric values (y-axis)'),
-                            tags.li('Allows you to identify and flag outliers in your data.'),
-                        ),
-                    ),
-                ),
-                style='display: flex; align-items: stretch;',
-            ),
+            'Home',
             ui.br(),
-            ui.row(
-                ui.column(
-                    8,
-                    ui.output_ui('upload_text'),
-                ),
+            tags.h4('DWR Outlier Tool', class_='tab-title'),
+            tags.p(
+                'Identifies and flags outliers for a selected '
+                'continuous water-quality parameter.'
+            ),
+            tags.ul(
+                tags.li('Dates are displayed on the x-axis.'),
+                tags.li('Numeric values are displayed on the y-axis.')
+            ),
+            tags.p('Questions: Contact DWR QA Section'),
+            tags.hr(),
+            tags.h4('Guidance', class_='tab-title'),
+            tags.p(
+                'Some basic guidance on tool use?'
+            ),
+            tags.hr(),
+            tags.p(
+                tags.strong('Version:'),
+                ' 0.1.1',
+                class_='text-muted'
             ),
         ),
         ui.nav_panel(
-            '2. Check',
-            tags.h4('Ensure the data looks right', class_='tab-title'),
-            ui.row(
-                ui.column(6, ui.input_select('sel_files_check', 'File:', [])),
-                ui.column(
-                    3,
-                    ui.input_select(
-                        'sel_station_col',
-                        'Station column (optional):',
-                        {'': '(none)'},
-                        selected='',
+            '1. Upload',
+            ui.br(),
+            ui.card(
+                ui.card_header('Upload Data', class_='h5 mb-0'),
+                ui.layout_sidebar(
+                    ui.sidebar(
+                        ui.input_select(
+                            'sel_file_format',
+                            ui.span(
+                                'File format (optional): ',
+                                ui.tooltip(
+                                    ui.span('\u2139'),
+                                    'Choose a predefined format only when your file follows one of '
+                                    'the listed formats. This tells the tool how to parse the data. '
+                                    'Otherwise, leave the selection as None.',
+                                ),
+                            ),
+                            [m.NO_FF, *schema.get_all_schema_names()],
+                        ),
+                        ui.input_file(
+                            'file1',
+                            'File:',
+                            multiple=False,
+                        ),
+                        ui.output_ui('upload_options'),
+                        width=350,
+                        open='always',
                     ),
+                    ui.output_ui('upload_text'),
                 ),
-                ui.column(
-                    2,
-                    ui.output_ui('station_col_warning'),
-                ),
+                fill=False,
+                class_='mb-3',
             ),
+        ),
+        ui.nav_panel(
+            '2. Define format',
+            ui.br(),
 
-            # color key legend
             ui.div(
-                ui.tags.span('Column color key:', class_='me-2'),
-                ui.tags.span('Station ID', class_='badge bg-warning text-dark me-2'),
-                ui.tags.span('Datetime', class_='badge bg-success me-2'),
-                ui.tags.span('Numeric', class_='badge bg-primary me-2'),
-                class_='mb-2',
+                ui.input_select(
+                    'sel_files_check',
+                    'File:',
+                    [],
+                ),
+                style='display: none;',
             ),
 
-            ui.output_data_frame('check_table'),
+            ui.card(
+                ui.card_header(
+                    'Define Data Format',
+                    class_='h5 mb-0',
+                ),
+
+                ui.layout_sidebar(
+                    ui.sidebar(
+                        ui.output_ui('data_shape_options'),
+                        ui.output_ui('analyte_selects'),
+
+                        ui.input_select(
+                            'sel_check_date',
+                            ui.span(
+                                'Date column:',
+                                class_='fw-semibold',
+                            ),
+                            [],
+                        ),
+
+                        ui.input_select(
+                            'sel_station_col',
+                            ui.span(
+                                'Station column (optional):',
+                                class_='fw-semibold',
+                            ),
+                            {'': '(none)'},
+                            selected='',
+                        ),
+
+                        ui.output_ui('station_col_warning'),
+
+                        ui.input_action_button(
+                            'btn_confirm_format',
+                            'Confirm format',
+                            class_='btn-primary',
+                            style='width: 100%;',
+                        ),
+
+                        width=380,
+                        open='always',
+                    ),
+
+                    ui.output_ui('format_preview'),
+                ),
+
+                fill=False,
+                class_='mb-3',
+            ),
         ),
         ui.nav_panel(
             '3. Test data',
+            ui.br(),
+
             ui.row(
-                ui.column(
-                    6,
-                    tags.h4('Set up and run outlier tests', class_='tab-title'),
+                ui.input_select(
+                    'sel_files_test',
+                    'File:',
+                    [],
                 ),
-                ui.column(
-                    6,
-                    ui.input_action_button('btn_test_help', 'Test descriptions', class_='btn-info'),
-                    style='display: flex; justify-content: right; align-items: center;',
-                ),
+                style='display: none;',
             ),
-            ui.row(
-                ui.input_select('sel_files_test', 'File:', []),
-            ),
-            ui.row(
-                ui.column(
-                    5,
-                    ui.p('Select combinations of tests and columns and click ">":'),
+
+            # Choose and configure tests
+            ui.card(
+                ui.card_header(
+                    'Test Setup',
+                    class_='h5 mb-0',
                 ),
-                ui.column(1),
-                ui.column(
-                    6,
-                    ui.span('Selected tests (some may need additional input):'),
-                ),
-            ),
-            ui.row(
-                ui.column(
-                    6,
-                    ui.row(
-                        ui.column(
-                            11,
-                            ui.output_ui('test_setup_left'),
+                ui.layout_sidebar(
+                    ui.sidebar(
+                        ui.output_ui('test_setup_left'),
+                        ui.input_action_button(
+                            'btn_test_move',
+                            'Add selected tests \u2192',
+                            class_='btn-primary',
+                            style='width: 100%;',
                         ),
-                        ui.column(
-                            1,
-                            ui.input_action_button('btn_test_move', '>', class_='btn-primary'),
-                            style='display:flex; justify-content: center',
-                        ),
+                        width=380,
+                        open='always',
                     ),
-                ),
-                ui.column(
-                    6,
                     ui.output_ui('test_setup_right'),
                 ),
+                fill=False,
+                class_='mb-3',
             ),
-            ui.br(),
-            ui.row(
-                ui.column(
-                    2,
-                    ui.input_action_button('btn_od', 'Run tests', class_='btn-light', style='height:90%;'),
-                    style='display:flex; justify-content: center',
+
+            # Run tests
+            ui.div(
+                ui.input_action_button(
+                    'btn_od',
+                    'Run selected tests',
+                    class_='btn-primary',
                 ),
-                style='display:flex; justify-content: center',
+                style=(
+                    'display: flex; '
+                    'justify-content: center; '
+                    'margin: 1rem 0;'
+                ),
             ),
-            ui.row(
-                ui.column(
-                    8,
-                    ui.output_data_frame('od_results_table'),
-                    style='display:flex; justify-content: center',
+
+            # Run tests and show results
+            ui.card(
+                ui.card_header(
+                    'Test Results',
+                    class_='h5 mb-0',
                 ),
-                style='display:flex; justify-content: center',
+                ui.output_ui('od_results_summary'),
+                fill=False,
             ),
         ),
-        ui.nav_panel(
-            '4. Review outliers',
-            tags.h4('Review and flag outliers', class_='tab-title'),
-            ui.row(
-                ui.column(
-                    5,
-                    ui.row(
-                        ui.input_select('sel_files_viz', 'File:', []),
-                    ),
-                    ui.row(
-                        ui.p('Test summary:'),
-                        ui.output_data_frame('od_results_table_viz'),
-                    ),
-                ),
-                ui.column(
-                    7,
-                    ui.row(
-                        ui.p(
-                            tags.b('Instructions:'),
-                            ui.br(),
-                            '1. Select outliers using',
-                            ui.HTML('&nbsp&nbsp'),
-                            ui.HTML(box_svg),
-                            ui.br(),
-                            '2. Click "toggle flag" to manually flag/unflag data',
+    ui.nav_panel(
+        '4. Review outliers',
+        ui.br(),
+
+        ui.div(
+            ui.input_select(
+                'sel_files_viz',
+                'File:',
+                [],
+            ),
+            style='display: none;',
+        ),
+
+        ui.card(
+            ui.card_header(
+                'Review Outliers',
+                class_='h5 mb-0',
+            ),
+
+            ui.layout_sidebar(
+                ui.sidebar(
+                    ui.div(
+                        ui.div(
+                            'Instructions:',
+                            class_='fw-semibold',
+                            style='margin-bottom: 3px;',
+                        ),
+                        ui.tags.ol(
+                            ui.tags.li(
+                                'Select outliers using ',
+                                ui.HTML(box_svg),
+                                ' in the upper-right corner of the graph',
+                            ),
+                            ui.tags.li(
+                                'Click "Toggle Flag" to manually flag data',
+                            ),
+                            style='padding-left: 1.5rem; margin-bottom: 2px;',
+                        ),
+
+                        ui.tags.em(
+                            'Tip: Click a legend item to hide those points',
+                            class_='text-muted',
                         ),
                     ),
-                    # break line
-                    ui.row(
-                        tags.hr(style='margin: 6px 0 10px 0;')
+
+                    ui.hr(
+                        style='margin: 10px 0 8px 0;',
                     ),
 
-                    # center the labels for x/y selects
-                    # TODO: move to css file
-                    ui.tags.style("""
-                    #sel_x-label, #sel_y-label {
-                        text-align: center;
-                        width: 100%;
-                        display: block;
-                    }
-                    """),
-
-                    # select x/y
-                    ui.row(
-                        tags.div(
-                            tags.div(ui.input_select('sel_x', 'x-axis (date):', []), style='min-width: 260px;'),
-                            tags.div(ui.input_select('sel_y', 'y-axis (number):', []), style='min-width: 260px;'),
-                            style='display:flex; justify-content:center; gap: 12px; width:100%;'
-                        )
+                    ui.input_select(
+                        'sel_review_analyte',
+                        ui.span(
+                            'Analyte to review:',
+                            class_='fw-semibold',
+                        ),
+                        [],
                     ),
 
-                    # plot row
-                    ui.row(
-                        tags.div(
-                            output_widget('plot_data'),
-                            style=(
-                                'border: 1px solid #dee2e6; border-radius: 6px; padding: 6px; '
-                                'background: #fff; margin-top: 10px; margin-bottom: 10px;'
-                            )
-                        )
+                    ui.div(
+                        'Test results',
+                        class_='fw-semibold mb-1',
                     ),
 
-                    # manual flag toggle button
-                    ui.row(
-                        tags.div(
-                            tags.div(
-                                ui.input_action_button(
-                                    'btn_undo_flag', 'Undo', class_='btn-light', style='margin: 0 3px;'
-                                ),
-                                ui.input_action_button(
-                                    'btn_toggle_flag',
-                                    'Toggle Flag',
-                                    class_='btn-secondary',
-                                    style='margin: 0 3px;'
-                                ),
-                                ui.input_action_button(
-                                    'btn_redo_flag', 'Redo', class_='btn-light', style='margin: 0 3px;'
-                                ),
-                                style='display:flex; justify-content:center; width:100%;'
-                            ),
-                            style='width:100%; margin-top: 10px;'
-                        )
+                    ui.output_ui('review_test_summary'),
+
+                    ui.hr(
+                        style='margin: 10px 0 8px 0;',
                     ),
+
+                    ui.input_select(
+                        'sel_review_against',
+                        ui.span(
+                            'Plot against:',
+                            class_='fw-semibold',
+                        ),
+                        {},
+                    ),
+
+                    width=380,
+                    open='always',
+                ),
+
+                ui.div(
+                    ui.output_ui('review_plot_title'),
+
+                    ui.output_ui('review_match_message'),
+
+                    ui.div(
+                        output_widget('plot_data'),
+                        style=(
+                            'border: 1px solid #dee2e6; '
+                            'border-radius: 6px; '
+                            'padding: 6px; '
+                            'background: #fff;'
+                        ),
+                    ),
+
+                    ui.div(
+                        ui.input_action_button(
+                            'btn_undo_flag',
+                            'Undo',
+                            class_='btn-light',
+                        ),
+                        ui.input_action_button(
+                            'btn_toggle_flag',
+                            'Toggle Flag',
+                            class_='btn-secondary',
+                        ),
+                        ui.input_action_button(
+                            'btn_redo_flag',
+                            'Redo',
+                            class_='btn-light',
+                        ),
+                        style=(
+                            'display: flex; '
+                            'justify-content: center; '
+                            'gap: 6px; '
+                            'margin-top: 1rem;'
+                        ),
+                    ),
+
+                    class_='p-2',
                 ),
             ),
+
+            fill=False,
+            class_='mb-3',
         ),
-        ui.nav_panel(
-            '5. Export',
-            tags.h4('Export your data', class_='tab-title'),
-            ui.row(
-                ui.column(
-                    4,
-                    ui.input_select('sel_files_export', 'Choose file to export:', []),
+    ),
+    ui.nav_panel(
+        '5. Export',
+        ui.br(),
+
+        ui.div(
+            ui.input_select(
+                'sel_files_export',
+                'File:',
+                [],
+            ),
+            style='display: none;',
+        ),
+
+        ui.card(
+            ui.card_header(
+                'Export Data',
+                class_='h5 mb-0',
+            ),
+
+            ui.layout_sidebar(
+                ui.sidebar(
+                    ui.div(
+                        'Export Settings',
+                        class_='h5 border-bottom pb-2 mb-1',
+                    ),
+                    ui.input_select(
+                        'sel_export_format',
+                        'File format:',
+                        ['.csv', '.xlsx'],
+                    ),
+
+                    ui.input_text(
+                        'text_export_custom_fname',
+                        'Custom file name (optional):',
+                        '',
+                    ),
+
                     ui.input_checkbox_group(
                         'export_settings',
                         '',
                         {
-                            'include_header': upload_util.checkbox_with_help(
-                                'Include header',
-                                'Exported file will include header row when checked',
-                            ),
-                            'include_passing_cols': upload_util.checkbox_with_help(
-                                'Include passing tests',
-                                'When checked, the exported file will also include outlier test results that yielded no failures.',
-                            ),
+                            'include_header': 'Include header',
                         },
-                        selected=[
-                            'include_header',
-                        ],
+                        selected=['include_header'],
                     ),
-                    ui.input_select('sel_export_format', 'File format:', ['.csv', '.xlsx']),
+
+                    ui.hr(style='margin: 12px 0;'),
+
+                    ui.output_ui('show_download_button'),
+                    ui.output_ui('export_filename'),
+
+                    width=380,
+                    open='always',
                 ),
-                ui.column(
-                    4,
-                    ui.input_text('text_export_custom_fname', 'Custom file name (optional):', ''),
+
+                ui.div(
                     ui.div(
-                        tags.label('Download:', for_='download_data', class_='control-label'),
-                        ui.div(
-                            ui.output_ui('show_download_button'),
-                        ),
+                        'Export Preview',
+                        class_='h5 border-bottom pb-2 mb-3',
                     ),
+                    ui.output_data_frame('export_table'),
+                    style='margin-top: -4px;',
                 ),
             ),
-            ui.br(),
-            ui.row(
-                ui.p('Export preview:'),
-                ui.br(),
-                ui.output_data_frame('export_table'),
-            ),
+
+            fill=False,
+            class_='mb-3',
         ),
-        id='navigation_bar',
     ),
-    ui.include_js(m.JS_UTIL),
-    ui.include_css(m.CSS_MISC),
-    window_title=m.WINDOW_TITLE,
-    theme=m.DEFAULT_THEME,
+
+    id='navigation_bar',
+),
+
+ui.include_js(m.JS_UTIL),
+ui.include_css(m.CSS_MISC),
+window_title=m.WINDOW_TITLE,
+theme=m.DEFAULT_THEME,
 )
