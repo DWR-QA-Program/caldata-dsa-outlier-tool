@@ -3,7 +3,7 @@ name: Build and deploy Python app to staging
 on:
   push:
     branches:
-      - presistent-state
+      - main
   workflow_dispatch:
 
 jobs:
