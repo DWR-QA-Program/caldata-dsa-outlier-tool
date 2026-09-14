@@ -827,20 +827,14 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
     @print_func_name('green')
     def export_table():
         req(selected_file := input.sel_files_export())
-
         file_obj = user_state().get_file(selected_file)
 
         df = get_export_df(file_obj)
 
         selected_export_options = (input.export_settings())
 
-        if (
-            'include_header'
-            not in selected_export_options
-        ):
-            asyncio.create_task(
-                remove_export_header()
-            )
+        if ('include_header' not in selected_export_options):
+            asyncio.create_task(remove_export_header())
 
         return df
 
