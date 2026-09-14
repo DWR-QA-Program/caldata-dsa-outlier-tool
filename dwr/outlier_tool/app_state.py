@@ -10,11 +10,11 @@ class State:
         self.files = {}
 
     def add_file(self, fname: str, df: pd.DataFrame, ff: str):
-            # Single-file mode: a new upload replaces whatever was loaded before.
-            # Remove this line to restore multi-file support.
-            self.files.clear()
-            self.files[fname] = File(fname, df, ff)
-            return self.get_file(fname)
+        # Single-file mode: a new upload replaces whatever was loaded before.
+        # Remove this line to restore multi-file support.
+        self.files.clear()
+        self.files[fname] = File(fname, df, ff)
+        return self.get_file(fname)
 
     def get_file(self, fname):
         return self.files[fname]
@@ -38,7 +38,6 @@ class File:
         self.is_long = False
         self.analyte_col = None
         self.value_col = None
-        
 
         # Match schema to file if possible
         if schema := get_schema(selected_ff):
@@ -105,7 +104,7 @@ class File:
             return pd.Series(True, index=self.df.index)
         return self.df[self.analyte_col].astype(str).str.strip() == analyte
 
-    def get_series(self, analyte: str, test_col: str = None) -> pd.Series:
+    def get_series(self, analyte: str, test_col: str | None = None) -> pd.Series:
         """Return the series a test should run on.
 
         `analyte` chooses the rows, `test_col` chooses the column. For most tests
@@ -186,9 +185,6 @@ class File:
         self.manual_flags[analyte] = set(manual)
         self.flag_overrides[analyte] = set(overrides)
 
-    def get_manual_flags(self, analyte: str) -> set:
-        return self.manual_flags.get(analyte, set())
-
     def output_results_as_df(self):
         analyte_key = 'Analyte'
         test_key_col = 'Test name'
@@ -211,6 +207,4 @@ class File:
             return []
         if self.analyte_col not in self.df.columns:
             return []
-        return sorted(
-            self.df[self.analyte_col].dropna().astype(str).str.strip().unique().tolist()
-        )
+        return sorted(self.df[self.analyte_col].dropna().astype(str).str.strip().unique().tolist())

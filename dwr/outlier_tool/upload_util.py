@@ -451,6 +451,7 @@ def deduplicate_columns(df: pd.DataFrame) -> pd.DataFrame:
     df.columns = new_cols
     return df
 
+
 def guess_col(cols, keywords, default=None):
     """
     Returns the first column whose name contains any of the given keywords.

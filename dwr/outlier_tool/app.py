@@ -10,7 +10,7 @@ from shiny.types import FileInfo, SilentException
 from shinywidgets import render_widget
 
 from . import app_state, app_ui, m, od, od_ui, plot, schema, upload_util, util
-from .util import jlog, jlog1, print_func_name
+from .util import jlog1, print_func_name
 
 
 def req(variable):
@@ -77,9 +77,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         shape = input.radio_data_shape()
 
         if shape not in {'wide', 'long'}:
-            util.show_error(
-                'Choose how analyte values are listed.'
-            )
+            util.show_error('Choose how analyte values are listed.')
             return
 
         is_long = shape == 'long'
@@ -100,9 +98,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         else:
             analyte_name_col = None
             analyte_value_col = None
-            analyte_cols = list(
-                input.sel_wide_analyte_cols() or []
-            )
+            analyte_cols = list(input.sel_wide_analyte_cols() or [])
 
             assigned_cols = [
                 station_col,
@@ -110,10 +106,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
                 *analyte_cols,
             ]
 
-        assigned_cols = [
-            col for col in assigned_cols
-            if col
-        ]
+        assigned_cols = [col for col in assigned_cols if col]
 
         if len(assigned_cols) != len(set(assigned_cols)):
             util.show_error(
@@ -155,8 +148,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
     def format_preview():
         if confirmed_format() is None:
             return ui.p(
-                'Data format has not been confirmed yet. '
-                'Confirm the format to preview your data.',
+                'Data format has not been confirmed yet. Confirm the format to preview your data.',
                 class_='text-muted',
             )
 
@@ -164,7 +156,6 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
             ui.output_ui('column_color_key'),
             ui.output_data_frame('check_table'),
         )
-
 
     # When the user selects a file, they generally expect to see the same selected file on
     # all navigation tabs. We keep all file selectors in sync here to meet this expectation.
@@ -273,7 +264,6 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         file_obj.last_selected_y_col = analyte
         _update_review_against(file_obj, analyte)
 
-
     # color stuff (check tab)
     @render.ui
     def column_color_key():
@@ -341,10 +331,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
             return None
 
         keywords = ('site', 'station', 'location')
-        candidates = [
-            c for c in df.columns
-            if any(k in str(c).strip().lower() for k in keywords)
-        ]
+        candidates = [c for c in df.columns if any(k in str(c).strip().lower() for k in keywords)]
 
         # if none or multiple, no default
         if len(candidates) != 1:
@@ -413,15 +400,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         if station_col not in df.columns:
             return None
 
-        vals = (
-            df[station_col]
-            .dropna()
-            .astype(str)
-            .str.strip()
-            .str.upper()
-            .unique()
-            .tolist()
-        )
+        vals = df[station_col].dropna().astype(str).str.strip().str.upper().unique().tolist()
 
         return vals[0] if vals else None
 
@@ -440,7 +419,9 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
         vals = df[station_col].dropna().astype(str).str.strip().unique().tolist()
         if len(vals) > 1:
-            return util.danger(f'Station column has {len(vals)} unique values. Only the first ({vals[0]}) will be used.')
+            return util.danger(
+                f'Station column has {len(vals)} unique values. Only the first ({vals[0]}) will be used.'
+            )
         return None
 
     # validate tests aren't missing params
@@ -552,11 +533,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
             return None
 
-        asyncio.create_task(
-            label_columns(
-                list(df.columns.map(mapper))
-            )
-        )
+        asyncio.create_task(label_columns(list(df.columns.map(mapper))))
 
         return df
 
@@ -603,9 +580,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
             df = df[df['Analyte'] == analyte]
 
         keep_cols = [
-            col
-            for col in ('Analyte', 'Test name', 'Data points that failed')
-            if col in df.columns
+            col for col in ('Analyte', 'Test name', 'Data points that failed') if col in df.columns
         ]
 
         return df[keep_cols] if keep_cols else df
@@ -640,9 +615,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
                 continue
 
             result = result.fillna(False).astype(bool)
-            failed_by_test.setdefault(test_key, set()).update(
-                result[result].index.tolist()
-            )
+            failed_by_test.setdefault(test_key, set()).update(result[result].index.tolist())
 
         if not failed_by_test:
             return ui.p(
@@ -736,18 +709,12 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         ):
             col = outlier_col(analyte)
 
-            indices = df.index.intersection(
-                indices
-            )
+            indices = df.index.intersection(indices)
 
             if len(indices) == 0:
                 return
 
-            current = (
-                df.loc[indices, col]
-                .fillna('')
-                .astype(str)
-            )
+            current = df.loc[indices, col].fillna('').astype(str)
 
             df.loc[indices, col] = np.where(
                 current.eq(''),
@@ -767,35 +734,19 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
             analyte,
             method_key,
         ), entry in file_obj.od_results.items():
-            if (
-                entry['error'] is not None
-                or entry['result'] is None
-            ):
+            if entry['error'] is not None or entry['result'] is None:
                 continue
 
-            result = (
-                entry['result']
-                .fillna(False)
-                .astype(bool)
-            )
+            result = entry['result'].fillna(False).astype(bool)
 
             # Respect flags that the user manually cleared
             # during Review.
-            overrides = file_obj.get_flag_overrides(
-                analyte
-            )
+            overrides = file_obj.get_flag_overrides(analyte)
 
             if overrides:
-                result = (
-                    result
-                    & ~result.index.isin(
-                        list(overrides)
-                    )
-                )
+                result = result & ~result.index.isin(list(overrides))
 
-            failed_indices = result[
-                result
-            ].index
+            failed_indices = result[result].index
 
             add_result(
                 analyte,
@@ -814,14 +765,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
                 'Manually flagged',
             )
 
-        return df[
-            [
-                col
-                for col in df.columns
-                if col not in m.INTERNAL_COLS
-            ]
-        ]
-
+        return df[[col for col in df.columns if col not in m.INTERNAL_COLS]]
 
     @render.data_frame
     @print_func_name('green')
@@ -831,9 +775,9 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
         df = get_export_df(file_obj)
 
-        selected_export_options = (input.export_settings())
+        selected_export_options = input.export_settings()
 
-        if ('include_header' not in selected_export_options):
+        if 'include_header' not in selected_export_options:
             asyncio.create_task(remove_export_header())
 
         return df
@@ -894,9 +838,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         y_keys = y_rows[[*keys]].copy()
         y_keys['__review_row_index__'] = y_keys.index
 
-        x_values = x_complete_keys[[*keys, value_col]].rename(
-            columns={value_col: review_x_value_col}
-        )
+        x_values = x_complete_keys[[*keys, value_col]].rename(columns={value_col: review_x_value_col})
 
         paired = y_keys.merge(
             x_values,
@@ -917,10 +859,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
                 'df': pd.DataFrame(),
                 'x_col': review_x_value_col,
                 'warning': None,
-                'error': (
-                    f'No {y_analyte} observations could be matched to '
-                    f'{x_analyte} by {key_text}.'
-                ),
+                'error': (f'No {y_analyte} observations could be matched to {x_analyte} by {key_text}.'),
             }
 
         warning = None
@@ -1130,7 +1069,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
                 ui.notification_show(
                     ui.p(f'Please report this to the admin: "toggle_flag": {e!r}'),
                     duration=None,
-                    type='error'
+                    type='error',
                 )
 
     @reactive.effect
@@ -1512,9 +1451,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
             test_info = od.OD_TESTS[test_key]
 
             if test_key == 'missing_data':
-                missing_results.setdefault(analyte, []).append(
-                    (method_key, entry)
-                )
+                missing_results.setdefault(analyte, []).append((method_key, entry))
                 continue
 
             method_name = od.OD_IMPLEMENTED[method_key]['plain']
@@ -1548,9 +1485,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
             for method_key, entry in entries:
                 result = entry['result'].fillna(False).astype(bool)
 
-                failed_indices.update(
-                    result[result].index.tolist()
-                )
+                failed_indices.update(result[result].index.tolist())
 
                 params = format_params(
                     method_key,
@@ -1560,11 +1495,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
                 if params != '\u2014':
                     parameter_parts.append(params)
 
-            parameters = (
-                '; '.join(dict.fromkeys(parameter_parts))
-                if parameter_parts
-                else '\u2014'
-            )
+            parameters = '; '.join(dict.fromkeys(parameter_parts)) if parameter_parts else '\u2014'
 
             rows_by_analyte.setdefault(analyte, []).append(
                 {
@@ -1588,10 +1519,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
                 ui.div(
                     ui.div(
                         analyte,
-                        class_=(
-                            'fw-bold px-3 py-2 border-bottom '
-                            'bg-secondary-subtle text-center'
-                        ),
+                        class_=('fw-bold px-3 py-2 border-bottom bg-secondary-subtle text-center'),
                     ),
                     ui.tags.table(
                         ui.tags.thead(
@@ -1642,10 +1570,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
                                 for row in rows
                             ]
                         ),
-                        class_=(
-                            'table table-sm table-bordered '
-                            'table-hover mb-0'
-                        ),
+                        class_=('table table-sm table-bordered table-hover mb-0'),
                     ),
                     class_='border rounded mb-3 overflow-hidden mx-auto',
                     style='max-width: 1150px;',
@@ -1668,10 +1593,8 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
         return file_obj.df is not None and not file_obj.df.empty
 
-
     def format_is_confirmed():
         return has_data() and confirmed_format() is not None
-
 
     def tests_have_run():
         selected_file = input.sel_files_test()
@@ -1686,66 +1609,68 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
         return bool(file_obj.od_results)
 
-
     def can_define_format():
         return has_data()
-
 
     def can_test():
         return has_data() and format_is_confirmed()
 
-
     def can_review():
         return can_test() and tests_have_run()
 
-
     def can_export():
         return can_test() and tests_have_run()
-
 
     @reactive.effect
     def enforce_workflow():
         tab = input.navigation_bar()
 
-        if tab in {
-            '2. Define format',
-            '3. Test data',
-            '4. Review outliers',
-            '5. Export',
-        } and not has_data():
-            util.show_warning(
-                'Upload data before continuing.'
-            )
+        if (
+            tab
+            in {
+                '2. Define format',
+                '3. Test data',
+                '4. Review outliers',
+                '5. Export',
+            }
+            and not has_data()
+        ):
+            util.show_warning('Upload data before continuing.')
             ui.update_navs(
                 'navigation_bar',
                 selected='1. Upload',
             )
             return
 
-        if tab in {
-            '3. Test data',
-            '4. Review outliers',
-            '5. Export',
-        } and not format_is_confirmed():
-            util.show_warning(
-                'Confirm the data format before continuing.'
-            )
+        if (
+            tab
+            in {
+                '3. Test data',
+                '4. Review outliers',
+                '5. Export',
+            }
+            and not format_is_confirmed()
+        ):
+            util.show_warning('Confirm the data format before continuing.')
             ui.update_navs(
                 'navigation_bar',
                 selected='2. Define format',
             )
             return
 
-        if tab in {
-            '4. Review outliers',
-            '5. Export',
-        } and not tests_have_run():
-            util.show_warning(
-                'Run tests before continuing.'
-            )
+        if (
+            tab
+            in {
+                '4. Review outliers',
+                '5. Export',
+            }
+            and not tests_have_run()
+        ):
+            util.show_warning('Run tests before continuing.')
             ui.update_navs(
                 'navigation_bar',
                 selected='3. Test data',
             )
+
 
 app = App(app_ui.app_ui, server, debug=False)

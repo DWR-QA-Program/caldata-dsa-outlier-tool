@@ -1,5 +1,4 @@
 # Functions and objects related to setting up a UI for outlier detection tests.
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -7,12 +6,12 @@ from shiny import Inputs, reactive, ui
 
 from . import od, od_core
 from .app_ui import trash_svg
-
 from .caching import (
     clear_station_test_defaults,
     get_station_test_defaults,
     set_station_test_defaults,
 )
+
 
 @dataclass
 class ODTest:
@@ -21,7 +20,7 @@ class ODTest:
     test_key: str  # name of test as defined in od.OD_IMPLEMENTED
     test_col: str  # column the test reads: the analyte's values, or the date column
     analyte: str = ''  # analyte this test was selected for
-    date_col: str = '' # date of sampling event
+    date_col: str = ''  # date of sampling event
     _fn_kwargs: dict[str, Any] | None = field(default_factory=dict)
     _user_input_locations: list[tuple[str, str]] | None = field(default_factory=list)
 
@@ -103,7 +102,7 @@ class ODTestSet:
     # per test, grouped under a header per analyte. The user will be able to edit
     # test parameters/arguments and those values will be collected when "run tests"
     # is clicked.
-    def get_ui(self, input_obj: Inputs, station_id: str | None = None):
+    def get_ui(self, input_obj: Inputs, station_id: str | None = None): # noqa: PLR0915
         panels_by_analyte = {}
 
         with reactive.isolate():
@@ -155,7 +154,9 @@ class ODTestSet:
                         ui.p(
                             arg_help,
                             class_='text-muted small mb-0',
-                        ) if arg_help else None,
+                        )
+                        if arg_help
+                        else None,
                     )
                 )
 
@@ -172,10 +173,7 @@ class ODTestSet:
             if method_mode == 'choose_one':
                 return 'review settings', 'text-danger'
 
-            has_args = any(
-                od.OD_IMPLEMENTED[method_key].get('args')
-                for method_key in methods
-            )
+            has_args = any(od.OD_IMPLEMENTED[method_key].get('args') for method_key in methods)
 
             if has_args:
                 return 'review settings', 'text-danger'
@@ -199,10 +197,7 @@ class ODTestSet:
                     for key, value in cached.items():
                         test._fn_kwargs.setdefault(key, value)
 
-            base_id = (
-                f'{test.test_key}_{test.test_col.replace(" ", "_")}'
-                f'_{test.analyte.replace(" ", "_")}'
-            )
+            base_id = f'{test.test_key}_{test.test_col.replace(" ", "_")}_{test.analyte.replace(" ", "_")}'
 
             body = []
 
@@ -226,12 +221,7 @@ class ODTestSet:
                             ),
                             class_='method-radio',
                         ),
-                        style=(
-                            'display: flex; '
-                            'align-items: baseline; '
-                            'gap: 10px; '
-                            'margin-bottom: 0.5rem;'
-                        ),
+                        style=('display: flex; align-items: baseline; gap: 10px; margin-bottom: 0.5rem;'),
                     )
                 )
 
@@ -399,16 +389,9 @@ class ODTestSet:
         test_list = []
 
         def get_method_args(method_key, values):
-            allowed_args = {
-                arg[0]
-                for arg in od.OD_IMPLEMENTED[method_key].get('args', ())
-            }
+            allowed_args = {arg[0] for arg in od.OD_IMPLEMENTED[method_key].get('args', ())}
 
-            return {
-                key: value
-                for key, value in values.items()
-                if key in allowed_args
-            }
+            return {key: value for key, value in values.items() if key in allowed_args}
 
         for test in self:
             test_info = od.OD_TESTS[test.test_key]
@@ -416,18 +399,12 @@ class ODTestSet:
             values = dict(test._fn_kwargs or {})
 
             if test_info['method_mode'] == 'choose_one':
-                methods = (
-                    values.get('_method', methods[0]),
-                )
+                methods = (values.get('_method', methods[0]),)
 
             for method_key in methods:
                 method_info = od.OD_IMPLEMENTED[method_key]
 
-                test_col = (
-                    test.date_col
-                    if method_info['ts_col_type'] == 'x'
-                    else test.test_col
-                )
+                test_col = test.date_col if method_info['ts_col_type'] == 'x' else test.test_col
 
                 test_list.append(
                     (

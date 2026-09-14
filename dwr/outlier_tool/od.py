@@ -11,7 +11,6 @@ import pandas as pd
 from shiny import ui
 
 from . import app_state, m, od_core
-from .m import _F, MANUAL, MULTIPLE_FAILURES, PASS
 
 OD_IMPLEMENTED = {
     # Dictionary structure:
@@ -32,7 +31,7 @@ OD_IMPLEMENTED = {
     #     'col_widths': optional configuration to pass to accordion creation, affects argument layout
     #                   and can be used to limit the overall size of input boxes inside the accordion.
     # }
-'gross_range_test': {
+    'gross_range_test': {
         'fn': od_core.gross_range_test,
         'plain': 'Gross range test',
         'desc': 'Flags values outside a set min/max range.',
@@ -120,8 +119,8 @@ OD_IMPLEMENTED = {
         'plain': 'Modified z-score test',
         'desc': 'Flags outliers using the median. Robust to extreme values.',
         'help': (
-                'Measures how far each value is from the median using a robust measure of spread. '
-                'Values beyond the selected modified z-score cutoff are flagged.'
+            'Measures how far each value is from the median using a robust measure of spread. '
+            'Values beyond the selected modified z-score cutoff are flagged.'
         ),
         'group': 'value',
         'ts_col_type': 'y',
@@ -205,6 +204,7 @@ OD_IMPLEMENTED = {
     },
 }
 
+
 def apply_renames(figure, renames) -> None:
     if renames:
         figure.for_each_trace(
@@ -266,6 +266,7 @@ async def run_od(test_list, file_obj: app_state.File):
             # to events while tests are running.
             await asyncio.sleep(sleep_duration)
 
+
 OD_TESTS = {
     'plausible_limits': {
         'label': 'Plausible limits',
@@ -323,10 +324,7 @@ OD_TESTS = {
         'label': 'Sudden data spikes',
         'color': '#66a61e',
         'desc': 'Find isolated points that differ sharply from nearby readings.',
-        'help': (
-            'Looks for individual readings that depart from the local pattern '
-            'but then return to it.'
-        ),
+        'help': ('Looks for individual readings that depart from the local pattern but then return to it.'),
         'group': 'sequential',
         'methods': ('spike_detection_test',),
         'method_mode': 'single',
@@ -336,8 +334,7 @@ OD_TESTS = {
         'color': '#e6ab02',
         'desc': 'Find abrupt shifts in the local level of the data.',
         'help': (
-            'Looks for changes that persist across several readings rather than '
-            'a single isolated spike.'
+            'Looks for changes that persist across several readings rather than a single isolated spike.'
         ),
         'group': 'sequential',
         'methods': ('rate_of_change_test',),
