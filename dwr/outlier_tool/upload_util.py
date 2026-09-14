@@ -450,3 +450,32 @@ def deduplicate_columns(df: pd.DataFrame) -> pd.DataFrame:
 
     df.columns = new_cols
     return df
+
+def guess_col(cols, keywords, default=None):
+    """
+    Returns the first column whose name contains any of the given keywords.
+
+    Keywords are checked in order, so put the most specific ones first. Matching
+    is case-insensitive and substring-based, so 'value' matches 'Result Value'.
+
+    Parameters
+    ----------
+    cols : list
+        Column names to search.
+    keywords : iterable of str
+        Lowercase substrings to look for, in priority order.
+    default : any
+        Returned when nothing matches. Falls back to the first column if not given.
+
+    Returns
+    -------
+    The matching column name, or the default.
+    """
+    for kw in keywords:
+        for col in cols:
+            if kw in str(col).strip().lower():
+                return col
+
+    if default is not None:
+        return default
+    return cols[0] if cols else None

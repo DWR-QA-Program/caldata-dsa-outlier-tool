@@ -3,6 +3,7 @@
 # readability at the expense of mild confusion upon first seeing it.
 #
 import os
+from pathlib import Path
 
 import shinyswatch
 
@@ -10,12 +11,15 @@ import shinyswatch
 # File paths that enhance the tool's usability
 #
 
+# Resolve resource paths relative to this package so runtime cwd does not matter.
+_BASE_DIR = Path(__file__).resolve().parent
+
 # Directory of custom schema files
-SCHEMA_DIR = 'outlier_tool/schemas'
+SCHEMA_DIR = str(_BASE_DIR / 'schemas')
 
 # Paths of custom javascript/CSS files
-JS_UTIL = 'outlier_tool/js/util.js'
-CSS_MISC = 'outlier_tool/css/misc.css'
+JS_UTIL = str(_BASE_DIR / 'js' / 'util.js')
+CSS_MISC = str(_BASE_DIR / 'css' / 'misc.css')
 
 #
 # Outlier detection column creation
@@ -61,11 +65,8 @@ INTERNAL_COLS = [
 # Column name of any datetime column created by the tool
 DATETIMECOL = 'DATETIME'
 
-# Location of custom schema files
-SCHEMA_DIR = 'outlier_tool/schemas'
-
 # Location of icon files
-ICONS_DIR = 'outlier_tool/icons'
+ICONS_DIR = str(_BASE_DIR / 'icons')
 DOTTED_BOX_ICON = os.path.join(ICONS_DIR, 'graph-selection-box.svg')
 TRASH_ICON = os.path.join(ICONS_DIR, 'trash.svg')
 

@@ -61,6 +61,41 @@
     fill: red;
 }
 
+/* Keep method radio buttons aligned cleanly with the Method label */
+.method-radio .shiny-input-radiogroup {
+    margin-bottom: 0;
+}
+
+.method-radio .form-check {
+    margin-bottom: 0;
+}
+
 .glow {
     box-shadow: 0 0 8px 8px var(--bs-nav-pills-link-active-bg);
+}
+
+/* badge colors for preview table */
+.column-station {
+    background-color: var(--bs-warning) !important;
+    color: var(--bs-dark) !important;
+}
+
+.column-datetime {
+    background-color: var(--bs-success) !important;
+    color: white !important;
+}
+
+.column-analyte {
+    background-color: var(--bs-primary) !important;
+    color: white !important;
+}
+
+.column-analyte-name {
+    background-color: var(--bs-info) !important;
+    color: var(--bs-dark) !important;
+}
+
+.column-analyte-value {
+    background-color: var(--bs-primary) !important;
+    color: white !important;
 }

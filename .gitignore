@@ -163,3 +163,4 @@ cython_debug/
 
 # Directory created automatically when hosting a shiny app
 dwr/rsconnect-python
+.Rproj.user

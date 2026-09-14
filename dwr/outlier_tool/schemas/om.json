@@ -2,6 +2,7 @@
     "name": "O&M (.PRN)",
     "description": "Data dictionary provided by Daniel Wisheropp from the O&M team",
     "file_format_description": "This is a comma-separated .PRN or .csv file without any header row. 14 columns are expected, though data columns can be null if a station doesn't collect a given dimension.",
+    "station_id_column": "SITE_NAME",
     "pandas_read_csv_arguments": {
         "header": null
     },
