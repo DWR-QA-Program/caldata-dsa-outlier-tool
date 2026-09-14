@@ -102,7 +102,7 @@ class ODTestSet:
     # per test, grouped under a header per analyte. The user will be able to edit
     # test parameters/arguments and those values will be collected when "run tests"
     # is clicked.
-    def get_ui(self, input_obj: Inputs, station_id: str | None = None): # noqa: PLR0915
+    def get_ui(self, input_obj: Inputs, station_id: str | None = None):  # noqa: PLR0915
         panels_by_analyte = {}
 
         with reactive.isolate():

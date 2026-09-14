@@ -284,7 +284,7 @@ def _add_flag_display_columns(
     return category_order
 
 
-def plot_data( # noqa: PLR0915
+def plot_data(  # noqa: PLR0915
     df: pd.DataFrame,
     x_col: str,
     y_col: str,
