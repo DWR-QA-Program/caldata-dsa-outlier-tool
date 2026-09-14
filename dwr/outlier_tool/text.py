@@ -11,10 +11,7 @@ app_ui.py; moving them here costs more in readability than it buys.
 # home tab ----------------------------------------------------------------
 
 HOME_TITLE = 'DWR Outlier Tool'
-HOME_INTRO = (
-    'Identifies and flags outliers for a selected continuous water-quality '
-    'parameter.'
-)
+HOME_INTRO = 'Identifies and flags outliers for a selected continuous water-quality parameter.'
 HOME_BULLETS = (
     'Dates are displayed on the x-axis.',
     'Numeric values are displayed on the y-axis.',
@@ -46,8 +43,7 @@ CHK_SKIP_ROWS = (
 )
 CHK_DATA_IS_LONG = (
     'Data is in long format',
-    'Check if each row is a single measurement, with analyte names in one '
-    'column and results in another.',
+    'Check if each row is a single measurement, with analyte names in one column and results in another.',
 )
 
 
@@ -84,12 +80,10 @@ DEFAULT_TEST_GROUP = 'value'
 # Warnings raised by _test_setup_left
 WARN_NO_DATA = 'No data available to test.'
 WARN_NO_ANALYTES = (
-    'No analytes were found. Check that the correct analyte column was '
-    'selected on the Upload tab.'
+    'No analytes were found. Check that the correct analyte column was selected on the Upload tab.'
 )
 WARN_NO_NUMERIC_COLS = (
-    'No columns are available to test. You may need to upload a file with '
-    'more numeric columns.'
+    'No columns are available to test. You may need to upload a file with more numeric columns.'
 )
 
 
@@ -115,4 +109,3 @@ CHK_INCLUDE_PASSING = (
     'When checked, the exported file will also include outlier test results ',
     'that yielded no failures.',
 )
-

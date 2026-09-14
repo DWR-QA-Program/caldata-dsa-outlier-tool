@@ -16,14 +16,13 @@ PASS_COLOR = '#999999'
 MULTIPLE_COLOR = '#a65628'
 MANUAL_COLOR = '#f781bf'
 
+
 # to help plot points look better
 def hex_to_rgba(hex_color, alpha):
     hex_color = hex_color.lstrip('#')
-    r, g, b = (
-        int(hex_color[i:i + 2], 16)
-        for i in (0, 2, 4)
-    )
+    r, g, b = (int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
     return f'rgba({r}, {g}, {b}, {alpha})'
+
 
 # Saves data to enable undo/redo buttons above the plot
 class PlotState:
@@ -127,6 +126,7 @@ class PlotState:
         self.x_range = None
         self.y_range = None
 
+
 # helper
 def _get_test_info(method_key):
     for test_key, test_info in od.OD_TESTS.items():
@@ -138,6 +138,7 @@ def _get_test_info(method_key):
         'color': '#6c757d',
     }
 
+
 def _build_flag_columns(
     df,
     y_col,
@@ -148,64 +149,39 @@ def _build_flag_columns(
     if file_obj is None:
         return labels
 
-    for method_key, entry in file_obj.get_od_results_for(
-        y_col
-    ).items():
-        if (
-            entry['error'] is not None
-            or entry['result'] is None
-        ):
+    for method_key, entry in file_obj.get_od_results_for(y_col).items():
+        if entry['error'] is not None or entry['result'] is None:
             continue
 
-        _, test_info = _get_test_info(
-            method_key
-        )
+        _, test_info = _get_test_info(method_key)
 
         label = test_info['label']
 
-        result = (
-            entry['result']
-            .reindex(df.index)
-            .fillna(False)
-            .astype(bool)
-        )
+        result = entry['result'].reindex(df.index).fillna(False).astype(bool)
 
         if label in labels:
-            labels[label] = (
-                labels[label] | result
-            )
+            labels[label] = labels[label] | result
         else:
             labels[label] = result
 
     # Overrides let the user clear a test-generated flag.
-    overrides = file_obj.get_flag_overrides(
-        y_col
-    )
+    overrides = file_obj.get_flag_overrides(y_col)
 
     if overrides:
         cleared = pd.Series(
-            df.index.isin(
-                list(overrides)
-            ),
+            df.index.isin(list(overrides)),
             index=df.index,
         )
 
-        for name in labels:
-            labels[name] = (
-                labels[name]
-                & ~cleared
-            )
+        for name, value in labels.items():
+            labels[name] = value & ~cleared
 
     # Manual flags are kept separately.
-    manual = file_obj.get_manual_flags(
-        y_col
-    )
+    manual = file_obj.get_manual_flags(y_col)
 
     if manual:
         labels[MANUALLY_FLAGGED] = pd.Series(
-            df.index.isin(
-                list(manual)
-            ),
+            df.index.isin(list(manual)),
             index=df.index,
         )
 
@@ -228,21 +204,13 @@ def _add_flag_display_columns(
         .astype(bool)
     )
 
-    test_names = [
-        name
-        for name in flags.columns
-        if name != MANUALLY_FLAGGED
-    ]
+    test_names = [name for name in flags.columns if name != MANUALLY_FLAGGED]
 
     if test_names:
         test_flags = flags[test_names]
-        n_test_flags = test_flags.sum(
-            axis=1
-        )
+        n_test_flags = test_flags.sum(axis=1)
     else:
-        test_flags = pd.DataFrame(
-            index=df.index
-        )
+        test_flags = pd.DataFrame(index=df.index)
         n_test_flags = pd.Series(
             0,
             index=df.index,
@@ -259,30 +227,19 @@ def _add_flag_display_columns(
     single_test = n_test_flags.eq(1)
 
     if single_test.any():
-        category.loc[single_test] = (
-            test_flags
-            .loc[single_test]
-            .idxmax(axis=1)
-        )
+        category.loc[single_test] = test_flags.loc[single_test].idxmax(axis=1)
 
     # More than one test failed.
     multiple_tests = n_test_flags.gt(1)
 
-    category.loc[
-        multiple_tests
-    ] = MULTIPLE_TESTS
+    category.loc[multiple_tests] = MULTIPLE_TESTS
 
     # Manual gets its own category only when no
     # automated test already flagged the point.
     if MANUALLY_FLAGGED in flags.columns:
-        manual_only = (
-            n_test_flags.eq(0)
-            & flags[MANUALLY_FLAGGED]
-        )
+        manual_only = n_test_flags.eq(0) & flags[MANUALLY_FLAGGED]
 
-        category.loc[
-            manual_only
-        ] = MANUALLY_FLAGGED
+        category.loc[manual_only] = MANUALLY_FLAGGED
 
     df[m.OUTLIER_TYPE] = category
 
@@ -300,24 +257,17 @@ def _add_flag_display_columns(
         if not mask.any():
             continue
 
-        current = failure_text.loc[
-            mask
-        ]
+        current = failure_text.loc[mask]
 
-        failure_text.loc[
-            mask
-        ] = np.where(
+        failure_text.loc[mask] = np.where(
             current.eq(''),
             name,
             current + '; ' + name,
         )
 
-    df[m.FAILURES] = (
-        failure_text
-        .mask(
-            failure_text.eq(''),
-            'None',
-        )
+    df[m.FAILURES] = failure_text.mask(
+        failure_text.eq(''),
+        'None',
     )
 
     category_order = [
@@ -326,23 +276,15 @@ def _add_flag_display_columns(
     ]
 
     if multiple_tests.any():
-        category_order.append(
-            MULTIPLE_TESTS
-        )
+        category_order.append(MULTIPLE_TESTS)
 
-    if (
-        MANUALLY_FLAGGED in flags.columns
-        and (
-            category == MANUALLY_FLAGGED
-        ).any()
-    ):
-        category_order.append(
-            MANUALLY_FLAGGED
-        )
+    if MANUALLY_FLAGGED in flags.columns and (category == MANUALLY_FLAGGED).any():
+        category_order.append(MANUALLY_FLAGGED)
 
     return category_order
 
-def plot_data(
+
+def plot_data(  # noqa: PLR0915
     df: pd.DataFrame,
     x_col: str,
     y_col: str,
@@ -357,20 +299,14 @@ def plot_data(
     # In long format, y_col is the analyte name.
     # The actual y values live in value_col.
     if file_obj is not None and file_obj.is_long:
-        df = df.loc[
-            file_obj.get_analyte_mask(y_col)
-        ]
+        df = df.loc[file_obj.get_analyte_mask(y_col)]
         plot_y = file_obj.value_col
     else:
         plot_y = y_col
 
     df = df.copy(deep=False)
 
-    if (
-        df.empty
-        or x_col not in df
-        or plot_y not in df
-    ):
+    if df.empty or x_col not in df or plot_y not in df:
         return go.FigureWidget()
 
     jlog1(f'{df[x_col].dtype}')
@@ -437,7 +373,8 @@ def plot_data(
                 plot_y,
                 None,
             )
-        ) is not None
+        )
+        is not None
         and col_obj.units is not None
     ):
         px_kwargs['labels'] = {
@@ -515,10 +452,7 @@ def plot_data(
         zeroline=False,
     )
 
-    if (
-        not hasattr(fig, '_config')
-        or fig._config is None
-    ):
+    if not hasattr(fig, '_config') or fig._config is None:
         fig._config = {}
 
     fig._config.update(
@@ -570,12 +504,8 @@ def plot_data(
     xrange, yrange = plot_state.get_zoom()
 
     if xrange and yrange:
-        fig.update_xaxes(
-            range=xrange
-        )
-        fig.update_yaxes(
-            range=yrange
-        )
+        fig.update_xaxes(range=xrange)
+        fig.update_yaxes(range=yrange)
 
     return fig
 
@@ -592,26 +522,17 @@ def callback_data_selected(
     trace_num: int,
     plot_state,
 ) -> None:
-    jlog1(
-        f'trace #{trace_num}: '
-        f'{trace.legendgroup}'
-    )
+    jlog1(f'trace #{trace_num}: {trace.legendgroup}')
 
-    df_indices = (
-        trace.customdata[
-            points.point_inds,
-            0,
-        ]
-    )
+    df_indices = trace.customdata[
+        points.point_inds,
+        0,
+    ]
 
     if trace_num == 0:
-        plot_state.set_selected_points(
-            df_indices
-        )
+        plot_state.set_selected_points(df_indices)
     else:
-        plot_state.append_selected_points(
-            df_indices
-        )
+        plot_state.append_selected_points(df_indices)
 
 
 @util.catch_errors

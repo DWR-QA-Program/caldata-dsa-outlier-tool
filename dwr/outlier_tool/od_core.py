@@ -104,10 +104,8 @@ def z_score_test(ts: pd.Series, number_of_standard_deviations: int = 3) -> pd.Se
     if ts.empty:
         raise ValueError('No input data.')
     z_score = stats.zscore(ts, nan_policy='omit')
-    return pd.Series(
-        np.abs(z_score) >= number_of_standard_deviations,
-        index=ts.index
-    )
+    return pd.Series(np.abs(z_score) >= number_of_standard_deviations, index=ts.index)
+
 
 def modified_z_score_test(ts: pd.Series, median_absolute_deviation: float = 4) -> pd.Series:
     """
@@ -158,11 +156,7 @@ def spike_detection_test(
         raise ValueError('Nearby readings must be at least 1.')
 
     nearby = pd.concat(
-        [
-            ts.shift(i)
-            for i in range(-nearby_readings, nearby_readings + 1)
-            if i != 0
-        ],
+        [ts.shift(i) for i in range(-nearby_readings, nearby_readings + 1) if i != 0],
         axis=1,
     )
 
@@ -217,9 +211,8 @@ def rate_of_change_test(
     before_median = before.median(axis=1)
     after_median = after.median(axis=1)
 
-    enough_data = (
-        (before.notna().sum(axis=1) == nearby_readings)
-        & (after.notna().sum(axis=1) == nearby_readings)
+    enough_data = (before.notna().sum(axis=1) == nearby_readings) & (
+        after.notna().sum(axis=1) == nearby_readings
     )
 
     difference = (after_median - before_median).abs()

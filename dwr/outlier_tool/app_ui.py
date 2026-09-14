@@ -3,7 +3,7 @@ from htmltools import tags
 from shiny import ui
 from shinywidgets import output_widget
 
-from . import m, schema, upload_util, util, text
+from . import m, schema, text, upload_util, util
 
 
 # Returns names (ids) of file selectors managed by the UI.
@@ -29,6 +29,7 @@ def load_icon(path, default=''):
 
 box_svg = load_icon(m.DOTTED_BOX_ICON)
 trash_svg = load_icon(m.TRASH_ICON, default='X')
+
 
 # Column 2 of the Check tab. Both shapes answer "where are the analytes",
 # just differently: wide names the columns, long names the column that holds
@@ -77,6 +78,7 @@ def _analyte_selects(
         multiple=True,
     )
 
+
 def _data_shape_options():
     return ui.input_radio_buttons(
         'radio_data_shape',
@@ -91,6 +93,7 @@ def _data_shape_options():
         },
         selected=None,
     )
+
 
 def show_upload_options():
     return ui.div(
@@ -173,7 +176,6 @@ def _test_setup_left(info: dict[str, list | dict]):
             'Choose tests',
             class_='h5 border-bottom pb-2 mb-3',
         ),
-
         ui.div(
             'Select Analyte(s):',
             class_='fw-semibold mb-1',
@@ -185,7 +187,6 @@ def _test_setup_left(info: dict[str, list | dict]):
             selected=analyte_choices,
             multiple=True,
         ),
-
         *[
             test_section(
                 title,
@@ -197,6 +198,7 @@ def _test_setup_left(info: dict[str, list | dict]):
             if group != 'comparison'
         ],
     )
+
 
 app_ui = ui.page_sidebar(
     ui.sidebar(
@@ -211,26 +213,17 @@ app_ui = ui.page_sidebar(
             'Home',
             ui.br(),
             tags.h4('DWR Outlier Tool', class_='tab-title'),
-            tags.p(
-                'Identifies and flags outliers for a selected '
-                'continuous water-quality parameter.'
-            ),
+            tags.p('Identifies and flags outliers for a selected continuous water-quality parameter.'),
             tags.ul(
                 tags.li('Dates are displayed on the x-axis.'),
-                tags.li('Numeric values are displayed on the y-axis.')
+                tags.li('Numeric values are displayed on the y-axis.'),
             ),
             tags.p('Questions: Contact DWR QA Section'),
             tags.hr(),
             tags.h4('Guidance', class_='tab-title'),
-            tags.p(
-                'Some basic guidance on tool use?'
-            ),
+            tags.p('Some basic guidance on tool use?'),
             tags.hr(),
-            tags.p(
-                tags.strong('Version:'),
-                ' 0.1.1',
-                class_='text-muted'
-            ),
+            tags.p(tags.strong('Version:'), ' 0.1.1', class_='text-muted'),
         ),
         ui.nav_panel(
             '1. Upload',
@@ -270,7 +263,6 @@ app_ui = ui.page_sidebar(
         ui.nav_panel(
             '2. Define format',
             ui.br(),
-
             ui.div(
                 ui.input_select(
                     'sel_files_check',
@@ -279,18 +271,15 @@ app_ui = ui.page_sidebar(
                 ),
                 style='display: none;',
             ),
-
             ui.card(
                 ui.card_header(
                     'Define Data Format',
                     class_='h5 mb-0',
                 ),
-
                 ui.layout_sidebar(
                     ui.sidebar(
                         ui.output_ui('data_shape_options'),
                         ui.output_ui('analyte_selects'),
-
                         ui.input_select(
                             'sel_check_date',
                             ui.span(
@@ -299,7 +288,6 @@ app_ui = ui.page_sidebar(
                             ),
                             [],
                         ),
-
                         ui.input_select(
                             'sel_station_col',
                             ui.span(
@@ -309,23 +297,18 @@ app_ui = ui.page_sidebar(
                             {'': '(none)'},
                             selected='',
                         ),
-
                         ui.output_ui('station_col_warning'),
-
                         ui.input_action_button(
                             'btn_confirm_format',
                             'Confirm format',
                             class_='btn-primary',
                             style='width: 100%;',
                         ),
-
                         width=380,
                         open='always',
                     ),
-
                     ui.output_ui('format_preview'),
                 ),
-
                 fill=False,
                 class_='mb-3',
             ),
@@ -333,7 +316,6 @@ app_ui = ui.page_sidebar(
         ui.nav_panel(
             '3. Test data',
             ui.br(),
-
             ui.row(
                 ui.input_select(
                     'sel_files_test',
@@ -342,7 +324,6 @@ app_ui = ui.page_sidebar(
                 ),
                 style='display: none;',
             ),
-
             # Choose and configure tests
             ui.card(
                 ui.card_header(
@@ -366,7 +347,6 @@ app_ui = ui.page_sidebar(
                 fill=False,
                 class_='mb-3',
             ),
-
             # Run tests
             ui.div(
                 ui.input_action_button(
@@ -374,13 +354,8 @@ app_ui = ui.page_sidebar(
                     'Run selected tests',
                     class_='btn-primary',
                 ),
-                style=(
-                    'display: flex; '
-                    'justify-content: center; '
-                    'margin: 1rem 0;'
-                ),
+                style=('display: flex; justify-content: center; margin: 1rem 0;'),
             ),
-
             # Run tests and show results
             ui.card(
                 ui.card_header(
@@ -391,210 +366,176 @@ app_ui = ui.page_sidebar(
                 fill=False,
             ),
         ),
-    ui.nav_panel(
-        '4. Review outliers',
-        ui.br(),
-
-        ui.div(
-            ui.input_select(
-                'sel_files_viz',
-                'File:',
-                [],
+        ui.nav_panel(
+            '4. Review outliers',
+            ui.br(),
+            ui.div(
+                ui.input_select(
+                    'sel_files_viz',
+                    'File:',
+                    [],
+                ),
+                style='display: none;',
             ),
-            style='display: none;',
+            ui.card(
+                ui.card_header(
+                    'Review Outliers',
+                    class_='h5 mb-0',
+                ),
+                ui.layout_sidebar(
+                    ui.sidebar(
+                        ui.div(
+                            ui.div(
+                                'Instructions:',
+                                class_='fw-semibold',
+                                style='margin-bottom: 3px;',
+                            ),
+                            ui.tags.ol(
+                                ui.tags.li(
+                                    'Select outliers using ',
+                                    ui.HTML(box_svg),
+                                    ' in the upper-right corner of the graph',
+                                ),
+                                ui.tags.li(
+                                    'Click "Toggle Flag" to manually flag data',
+                                ),
+                                style='padding-left: 1.5rem; margin-bottom: 2px;',
+                            ),
+                            ui.tags.em(
+                                'Tip: Click a legend item to hide those points',
+                                class_='text-muted',
+                            ),
+                        ),
+                        ui.hr(
+                            style='margin: 10px 0 8px 0;',
+                        ),
+                        ui.input_select(
+                            'sel_review_analyte',
+                            ui.span(
+                                'Analyte to review:',
+                                class_='fw-semibold',
+                            ),
+                            [],
+                        ),
+                        ui.div(
+                            'Test results',
+                            class_='fw-semibold mb-1',
+                        ),
+                        ui.output_ui('review_test_summary'),
+                        ui.hr(
+                            style='margin: 10px 0 8px 0;',
+                        ),
+                        ui.input_select(
+                            'sel_review_against',
+                            ui.span(
+                                'Plot against:',
+                                class_='fw-semibold',
+                            ),
+                            {},
+                        ),
+                        width=380,
+                        open='always',
+                    ),
+                    ui.div(
+                        ui.output_ui('review_plot_title'),
+                        ui.output_ui('review_match_message'),
+                        ui.div(
+                            output_widget('plot_data'),
+                            style=(
+                                'border: 1px solid #dee2e6; '
+                                'border-radius: 6px; '
+                                'padding: 6px; '
+                                'background: #fff;'
+                            ),
+                        ),
+                        ui.div(
+                            ui.input_action_button(
+                                'btn_undo_flag',
+                                'Undo',
+                                class_='btn-light',
+                            ),
+                            ui.input_action_button(
+                                'btn_toggle_flag',
+                                'Toggle Flag',
+                                class_='btn-secondary',
+                            ),
+                            ui.input_action_button(
+                                'btn_redo_flag',
+                                'Redo',
+                                class_='btn-light',
+                            ),
+                            style=('display: flex; justify-content: center; gap: 6px; margin-top: 1rem;'),
+                        ),
+                        class_='p-2',
+                    ),
+                ),
+                fill=False,
+                class_='mb-3',
+            ),
         ),
-
-        ui.card(
-            ui.card_header(
-                'Review Outliers',
-                class_='h5 mb-0',
+        ui.nav_panel(
+            '5. Export',
+            ui.br(),
+            ui.div(
+                ui.input_select(
+                    'sel_files_export',
+                    'File:',
+                    [],
+                ),
+                style='display: none;',
             ),
-
-            ui.layout_sidebar(
-                ui.sidebar(
+            ui.card(
+                ui.card_header(
+                    'Export Data',
+                    class_='h5 mb-0',
+                ),
+                ui.layout_sidebar(
+                    ui.sidebar(
+                        ui.div(
+                            'Export Settings',
+                            class_='h5 border-bottom pb-2 mb-1',
+                        ),
+                        ui.input_select(
+                            'sel_export_format',
+                            'File format:',
+                            ['.csv', '.xlsx'],
+                        ),
+                        ui.input_text(
+                            'text_export_custom_fname',
+                            'Custom file name (optional):',
+                            '',
+                        ),
+                        ui.input_checkbox_group(
+                            'export_settings',
+                            '',
+                            {
+                                'include_header': 'Include header',
+                            },
+                            selected=['include_header'],
+                        ),
+                        ui.hr(style='margin: 12px 0;'),
+                        ui.output_ui('show_download_button'),
+                        ui.output_ui('export_filename'),
+                        width=380,
+                        open='always',
+                    ),
                     ui.div(
                         ui.div(
-                            'Instructions:',
-                            class_='fw-semibold',
-                            style='margin-bottom: 3px;',
+                            'Export Preview',
+                            class_='h5 border-bottom pb-2 mb-3',
                         ),
-                        ui.tags.ol(
-                            ui.tags.li(
-                                'Select outliers using ',
-                                ui.HTML(box_svg),
-                                ' in the upper-right corner of the graph',
-                            ),
-                            ui.tags.li(
-                                'Click "Toggle Flag" to manually flag data',
-                            ),
-                            style='padding-left: 1.5rem; margin-bottom: 2px;',
-                        ),
-
-                        ui.tags.em(
-                            'Tip: Click a legend item to hide those points',
-                            class_='text-muted',
-                        ),
+                        ui.output_data_frame('export_table'),
+                        style='margin-top: -4px;',
                     ),
-
-                    ui.hr(
-                        style='margin: 10px 0 8px 0;',
-                    ),
-
-                    ui.input_select(
-                        'sel_review_analyte',
-                        ui.span(
-                            'Analyte to review:',
-                            class_='fw-semibold',
-                        ),
-                        [],
-                    ),
-
-                    ui.div(
-                        'Test results',
-                        class_='fw-semibold mb-1',
-                    ),
-
-                    ui.output_ui('review_test_summary'),
-
-                    ui.hr(
-                        style='margin: 10px 0 8px 0;',
-                    ),
-
-                    ui.input_select(
-                        'sel_review_against',
-                        ui.span(
-                            'Plot against:',
-                            class_='fw-semibold',
-                        ),
-                        {},
-                    ),
-
-                    width=380,
-                    open='always',
                 ),
-
-                ui.div(
-                    ui.output_ui('review_plot_title'),
-
-                    ui.output_ui('review_match_message'),
-
-                    ui.div(
-                        output_widget('plot_data'),
-                        style=(
-                            'border: 1px solid #dee2e6; '
-                            'border-radius: 6px; '
-                            'padding: 6px; '
-                            'background: #fff;'
-                        ),
-                    ),
-
-                    ui.div(
-                        ui.input_action_button(
-                            'btn_undo_flag',
-                            'Undo',
-                            class_='btn-light',
-                        ),
-                        ui.input_action_button(
-                            'btn_toggle_flag',
-                            'Toggle Flag',
-                            class_='btn-secondary',
-                        ),
-                        ui.input_action_button(
-                            'btn_redo_flag',
-                            'Redo',
-                            class_='btn-light',
-                        ),
-                        style=(
-                            'display: flex; '
-                            'justify-content: center; '
-                            'gap: 6px; '
-                            'margin-top: 1rem;'
-                        ),
-                    ),
-
-                    class_='p-2',
-                ),
+                fill=False,
+                class_='mb-3',
             ),
-
-            fill=False,
-            class_='mb-3',
         ),
+        id='navigation_bar',
     ),
-    ui.nav_panel(
-        '5. Export',
-        ui.br(),
-
-        ui.div(
-            ui.input_select(
-                'sel_files_export',
-                'File:',
-                [],
-            ),
-            style='display: none;',
-        ),
-
-        ui.card(
-            ui.card_header(
-                'Export Data',
-                class_='h5 mb-0',
-            ),
-
-            ui.layout_sidebar(
-                ui.sidebar(
-                    ui.div(
-                        'Export Settings',
-                        class_='h5 border-bottom pb-2 mb-1',
-                    ),
-                    ui.input_select(
-                        'sel_export_format',
-                        'File format:',
-                        ['.csv', '.xlsx'],
-                    ),
-
-                    ui.input_text(
-                        'text_export_custom_fname',
-                        'Custom file name (optional):',
-                        '',
-                    ),
-
-                    ui.input_checkbox_group(
-                        'export_settings',
-                        '',
-                        {
-                            'include_header': 'Include header',
-                        },
-                        selected=['include_header'],
-                    ),
-
-                    ui.hr(style='margin: 12px 0;'),
-
-                    ui.output_ui('show_download_button'),
-                    ui.output_ui('export_filename'),
-
-                    width=380,
-                    open='always',
-                ),
-
-                ui.div(
-                    ui.div(
-                        'Export Preview',
-                        class_='h5 border-bottom pb-2 mb-3',
-                    ),
-                    ui.output_data_frame('export_table'),
-                    style='margin-top: -4px;',
-                ),
-            ),
-
-            fill=False,
-            class_='mb-3',
-        ),
-    ),
-
-    id='navigation_bar',
-),
-
-ui.include_js(m.JS_UTIL),
-ui.include_css(m.CSS_MISC),
-window_title=m.WINDOW_TITLE,
-theme=m.DEFAULT_THEME,
+    ui.include_js(m.JS_UTIL),
+    ui.include_css(m.CSS_MISC),
+    window_title=m.WINDOW_TITLE,
+    theme=m.DEFAULT_THEME,
 )
