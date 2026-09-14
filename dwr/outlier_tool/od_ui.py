@@ -1,9 +1,12 @@
 # Functions and objects related to setting up a UI for outlier detection tests.
 from dataclasses import dataclass, field
 from typing import Any
+
 from shiny import Inputs, reactive, ui
+
 from . import od, od_core
 from .app_ui import trash_svg
+
 
 @dataclass
 class ODTest:
