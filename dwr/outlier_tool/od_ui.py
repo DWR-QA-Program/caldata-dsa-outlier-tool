@@ -1,17 +1,9 @@
 # Functions and objects related to setting up a UI for outlier detection tests.
 from dataclasses import dataclass, field
 from typing import Any
-
 from shiny import Inputs, reactive, ui
-
 from . import od, od_core
 from .app_ui import trash_svg
-from .caching import (
-    clear_station_test_defaults,
-    get_station_test_defaults,
-    set_station_test_defaults,
-)
-
 
 @dataclass
 class ODTest:
@@ -186,16 +178,6 @@ class ODTestSet:
             test_info = od.OD_TESTS[test.test_key]
             methods = test_info['methods']
             method_mode = test_info['method_mode']
-
-            if station_id:
-                cached = get_station_test_defaults(
-                    station_id,
-                    test.test_key,
-                    test.analyte,
-                )
-                if cached:
-                    for key, value in cached.items():
-                        test._fn_kwargs.setdefault(key, value)
 
             base_id = f'{test.test_key}_{test.test_col.replace(" ", "_")}_{test.analyte.replace(" ", "_")}'
 
@@ -416,33 +398,3 @@ class ODTestSet:
                 )
 
         return test_list
-
-    # Presist test values for a given station
-    def persist_station_defaults(self, station_id: str, input_obj: Inputs) -> None:
-        """
-        Persist current argument values for all tests with given Station_ID key
-
-        Behavior:
-        - Captures latest browser values into each ODTest._fn_kwargs
-        - If a test has no args, does nothing for that test
-        - If all arg values are None (or none exist), clears the stored defaults
-        - Otherwise stores the full arg dict for that station/analyte/test
-        """
-
-        if not station_id:
-            return
-
-        # Capture latest values from the browser into each ODTest._fn_kwargs
-        self.gather_user_arguments(input_obj)
-
-        for test in self:
-            test_info = od.OD_IMPLEMENTED.get(test.test_key, {})
-            if 'args' not in test_info:
-                continue
-
-            # Store the whole argument dict; if everything is None, remove remembered defaults
-            defaults = dict(test._fn_kwargs) if test._fn_kwargs else {}
-            if (not defaults) or all(v is None for v in defaults.values()):
-                clear_station_test_defaults(station_id, test.test_key, test.analyte)
-            else:
-                set_station_test_defaults(station_id, test.test_key, test.analyte, defaults)

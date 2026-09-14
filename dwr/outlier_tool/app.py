@@ -471,12 +471,6 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
             )
             return
 
-        # persist remembered defaults only after validation succeeds
-        sid = current_station_id()
-
-        if sid and hasattr(tests, 'persist_station_defaults'):
-            tests.persist_station_defaults(sid, input)
-
         # Keep the Review tab focused on an analyte that was actually tested.
         test_analytes = [analyte for _, analyte, _, _ in test_list]
 
