@@ -79,6 +79,9 @@ DEFAULT_THEME = shinyswatch.theme.darkly
 MAX_FILE_SIZE_BYTES = 100_000_000
 MAX_FILE_SIZE_MB = int(MAX_FILE_SIZE_BYTES / 1_000_000)
 
+# Bytes for progress bar to appear
+PROGRESS_FILE_SIZE_BYTES = 5_000_000
+
 # Threshold the tool can use to warn the user about performance issues
 WARN_FILE_SIZE_BYTES = 25_000_000
 WARN_FILE_SIZE_MB = int(WARN_FILE_SIZE_BYTES / 1_000_000)
