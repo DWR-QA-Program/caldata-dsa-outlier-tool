@@ -500,6 +500,7 @@ app_ui = ui.page_sidebar(
                             'File format:',
                             ['.csv', '.xlsx'],
                         ),
+                        ui.output_ui('export_format_warning'),
                         ui.input_text(
                             'text_export_custom_fname',
                             'Custom file name (optional):',

@@ -761,20 +761,19 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
         return df[[col for col in df.columns if col not in m.INTERNAL_COLS]]
 
+    @reactive.calc
+    def export_df():
+        req(selected_file := input.sel_files_export())
+        active_df()   # re-run when flags change
+        results_df()  # re-run when tests finish
+        return get_export_df(user_state().get_file(selected_file))
+
     @render.data_frame
     @print_func_name('green')
     def export_table():
-        req(selected_file := input.sel_files_export())
-        file_obj = user_state().get_file(selected_file)
-
-        df = get_export_df(file_obj)
-
-        selected_export_options = input.export_settings()
-
-        if 'include_header' not in selected_export_options:
+        if 'include_header' not in input.export_settings():
             asyncio.create_task(remove_export_header())
-
-        return df
+        return export_df().head(m.EXPORT_PREVIEW_ROWS)
 
     def _pair_long_review_data(
         file_obj: app_state.File,
@@ -1333,33 +1332,51 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         )
 
     @render.download(filename=get_export_file_name)
-    async def download_data(chunk_size=8192):
-        req(selected_file := input.sel_files_export())
-        file_obj = user_state().get_file(selected_file)
+    async def download_data():
+        req(input.sel_files_export())
 
         selected_ext = input.sel_export_format()
-        selected_export_options = input.export_settings()
+        header = 'include_header' in input.export_settings()
 
-        header = 'include_header' in selected_export_options
-
-        df = get_export_df(file_obj)
+        df = export_df()
 
         if selected_ext == '.xlsx':
-            buffer = BytesIO()
-            df.to_excel(buffer, index=False, header=header)
-        else:
-            buffer = StringIO()
-            df.to_csv(buffer, index=False, header=header)
+            def to_xlsx():
+                buffer = BytesIO()
+                df.to_excel(buffer, index=False, header=header)
+                return buffer.getvalue()
 
-        buffer.seek(0)
+            yield await asyncio.to_thread(to_xlsx)
+            return
 
-        while True:
-            # We don't seem to need to encode string values to binary
-            chunk = buffer.read(chunk_size)
-            if not chunk:
-                break
-            yield chunk
-            await asyncio.sleep(0)  # allow event loop to switch tasks
+        # Stream CSV in slices so bytes start flowing immediately
+        rows_per_chunk = 50_000
+        for start in range(0, len(df), rows_per_chunk):
+            chunk = df.iloc[start:start + rows_per_chunk]
+            yield chunk.to_csv(index=False, header=header and start == 0)
+            await asyncio.sleep(0)
+
+    @render.ui
+    def export_format_warning():
+        if input.sel_export_format() != '.xlsx':
+            return None
+
+        n_rows = len(export_df())
+
+        if n_rows > m.EXCEL_MAX_ROWS:
+            return util.danger(
+                f'This file has {n_rows:,} rows, more than Excel can hold '
+                f'({m.EXCEL_MAX_ROWS:,}). Export as CSV instead.'
+            )
+
+        if n_rows > m.EXCEL_WARN_ROWS:
+            return ui.p(
+                f'This file has {n_rows:,} rows. Excel export may take a while; '
+                'CSV is much faster.',
+                class_='text-warning small',
+            )
+
+        return None
 
     #
     # Variables that rely on above functions:

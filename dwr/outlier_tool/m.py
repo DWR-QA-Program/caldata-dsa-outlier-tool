@@ -62,6 +62,13 @@ INTERNAL_COLS = [
 # Other
 #
 
+# Number of export preveiw rows
+EXPORT_PREVIEW_ROWS = 1_000
+
+# Excel row limits for export
+EXCEL_MAX_ROWS = 1_048_575   # Excel's limit minus one row for the header
+EXCEL_WARN_ROWS = 200_000
+
 # Column name of any datetime column created by the tool
 DATETIMECOL = 'DATETIME'
 
