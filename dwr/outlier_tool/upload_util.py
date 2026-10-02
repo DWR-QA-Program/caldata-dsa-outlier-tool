@@ -35,11 +35,12 @@ def read_file(
             duration=None,
         )
         return None
-    elif fsize > m.WARN_FILE_SIZE_BYTES:
+
+    if fsize > m.WARN_FILE_SIZE_BYTES:
         util.show_warning(f'File sizes greater than {m.WARN_FILE_SIZE_MB} MB may cause performance issues.')
-        progress = ui.Progress(0, 3)  # this needs to be closed before the function completes
-    else:
-        progress = None
+
+    # this needs to be closed before the function completes
+    progress = ui.Progress(0, 3) if fsize > m.PROGRESS_FILE_SIZE_BYTES else None
 
     # Read all upload settings
     with reactive.isolate():
