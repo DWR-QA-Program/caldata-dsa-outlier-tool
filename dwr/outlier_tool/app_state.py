@@ -65,10 +65,23 @@ class File:
         self.num_cols = upload_util.get_num_cols(self.df, self.empty_cols, self.schema)
 
         # Coerce numeric/string columns to date columns (this is a slow operation)
+        # for col in self.date_cols:
+        #     # Inconsistent data can throw this operation off
+        #     try:
+        #         self.df[col] = self.df[col].apply(upload_util.try_parse_date)
+        #     except TypeError as e:
+        #         print(e)
+        #         # TODO: get this info back to the user
+        #     except Exception as e:
+        #         print(e)
+
+        # Coerce numeric/string columns to date columns
         for col in self.date_cols:
+            if pd.api.types.is_numeric_dtype(self.df[col]):
+                continue
             # Inconsistent data can throw this operation off
             try:
-                self.df[col] = self.df[col].apply(upload_util.try_parse_date)
+                self.df[col] = pd.to_datetime(self.df[col], format='mixed')
             except TypeError as e:
                 print(e)
                 # TODO: get this info back to the user

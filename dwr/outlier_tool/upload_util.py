@@ -63,7 +63,7 @@ def read_file(
 
     msg_kw = {}
     # Register file with internal systems
-    util.cond_progress(progress, 1, 'Setting up tool internals')
+    util.cond_progress(progress, 1, 'Uploading file')
     state = user_state()
     file_obj = state.add_file(fname, df, selected_ff)
     msg_kw['total_cols'] = len(file_obj.df.columns)

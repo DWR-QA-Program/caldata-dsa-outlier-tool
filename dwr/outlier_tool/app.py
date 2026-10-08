@@ -529,7 +529,8 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
         asyncio.create_task(label_columns(list(df.columns.map(mapper))))
 
-        return df
+        # Only return subset of rows for preview
+        return df.head(m.EXPORT_PREVIEW_ROWS)
 
     # This function updates our reactive dataframes so that when outlier detection
     # tests are finished running, the results dataframe and plot will update as well.
