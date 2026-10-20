@@ -1,13 +1,12 @@
 import asyncio
-from io import BytesIO, StringIO
+import itertools
+from io import BytesIO
 
 import numpy as np
 import pandas as pd
-import plotly.express as px
 import shinyswatch
 from shiny import App, Inputs, Outputs, Session, reactive, render, ui
 from shiny.types import FileInfo, SilentException
-from shinywidgets import render_widget
 
 from . import app_state, app_ui, m, od, od_ui, plot, schema, upload_util, util
 from .util import jlog1, print_func_name
@@ -146,11 +145,10 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
     @render.ui
     def format_preview():
-        if confirmed_format() is None:
-            return ui.p(
-                'Data format has not been confirmed yet. Confirm the format to preview your data.',
-                class_='text-muted',
-            )
+        return ui.div(
+            ui.output_ui('column_color_key'),
+            ui.output_data_frame('check_table'),
+        )
 
         return ui.div(
             ui.output_ui('column_color_key'),
@@ -498,7 +496,12 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         df = df[[c for c in df.columns if c not in m.INTERNAL_COLS]]
 
         format_info = confirmed_format()
-        req(format_info)
+
+        # Before the format is confirmed: plain table, no column colors.
+        # Sending all-None labels also clears colors left from a previous confirm.
+        if format_info is None:
+            asyncio.create_task(label_columns([None] * len(df.columns)))
+            return df.head(m.EXPORT_PREVIEW_ROWS)
 
         station_col = format_info['station_col']
         date_col = format_info['date_col']
@@ -867,7 +870,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
         # Keep the original long dataframe shape so plot.py can apply its existing
         # analyte mask. Only the reviewed-analyte rows receive an x value.
-        plot_df = df.copy()
+        plot_df = df.copy(deep=False)
         plot_df[review_x_value_col] = np.nan
         matched_indices = paired.index[matched]
         plot_df.loc[matched_indices, review_x_value_col] = paired.loc[
@@ -972,28 +975,119 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
         return None
 
-    @render_widget
+    review_tab = '4. Review outliers'
+    plot_build_counter = itertools.count()
+
+    # Identifies the current plot; the browser keeps zoom while this stays the same.
+    def _review_rev():
+        return f'{input.sel_files_viz()}|{input.sel_review_analyte()}|{input.sel_review_against()}'
+
+    # Heavy, zoom-independent part. Rebuilt only when data, flags or settings change.
+    @reactive.calc
     @print_func_name
-    def plot_data():
-        active_df()
+    def review_plot_data():
+        active_df()  # re-run when flags change
 
         info = review_plot_info()
-
         if info['error'] or info['df'].empty:
-            return px.scatter()
+            return None
 
         req(selected_file := input.sel_files_viz())
         req(analyte := input.sel_review_analyte())
+        req(plot_against := input.sel_review_against())
         file_obj = user_state().get_file(selected_file)
 
-        return plot.plot_data(
+        x_label = file_obj.last_selected_x_col if plot_against == review_date else plot_against
+
+        return plot.build_plot_data(
             info['df'],
             info['x_col'],
             analyte,
             file_obj.schema,
-            plot_state,
             file_obj=file_obj,
+            x_label=x_label,
         )
+
+    # Visible range reported by the browser, or None when zoomed all the way out.
+    @reactive.calc
+    def review_view():
+        try:
+            view = input.review_plot_view()
+        except SilentException:  # browser hasn't reported a range yet
+            return None
+
+        # Ignore ranges left over from a different file/analyte/axis
+        if not view or view.get('rev') != _review_rev():
+            return None
+
+        view = {k: view.get(k) for k in ('x0', 'x1', 'y0', 'y1')}
+        if all(v is None for v in view.values()):
+            return None
+        return view
+
+    # Cheap part: re-run on every zoom/pan for large datasets.
+    @reactive.calc
+    def review_figure():
+        data = review_plot_data()
+        if data is None:
+            return None, None
+
+        # Small datasets don't depend on zoom, so panning them never triggers a redraw
+        view = review_view() if data['large'] else None
+
+        fig, status = plot.make_figure(
+            data,
+            view=view,
+            uirevision=_review_rev(),
+            selectionrevision=next(plot_build_counter),
+        )
+        return fig.to_json(), status
+
+    # Send the figure to the browser, only while the Review tab is showing.
+    @reactive.effect
+    async def send_review_plot():
+        req(input.navigation_bar() == review_tab)
+        fig_json, _ = review_figure()
+
+        # Every redraw clears the selection in the browser; keep the server in step
+        plot_state.reset_selected_points()
+
+        if fig_json is None:
+            await session.send_custom_message('review_plot', {'clear': True})
+            return
+
+        await session.send_custom_message(
+            'review_plot',
+            {'fig': fig_json, 'config': plot.PLOT_CONFIG},
+        )
+
+    # Line above the plot: green when every point is shown, amber when sampled
+    @render.ui
+    def review_plot_status():
+        _, status = review_figure()
+        msg = plot.describe_status(status)
+        if msg is None:
+            return None
+
+        level, text = msg
+        alert = 'alert-success' if level == 'success' else 'alert-warning'
+        return ui.div(text, class_=f'alert {alert} py-1 px-2 mb-2 small', style='text-align: center;')
+
+    # Box/lasso selections arrive from the browser as row indices.
+    @reactive.effect
+    @reactive.event(input.review_plot_selected)
+    def track_plot_selection():
+        points = list(input.review_plot_selected() or [])
+        plot_state.set_selected_points(points)
+
+        with reactive.isolate():
+            _, status = review_figure()
+
+        if points and status and status['sampled']:
+            util.show_warning(
+                'Some passing points may be hidden at this zoom level. '
+                'Zoom in further to select them all.'
+            )
 
     # Manual flags and overrides live on the File, not as columns, so writing them
     # is just a state swap followed by a nudge to the reactive dataframe.
@@ -1004,8 +1098,6 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         dfcp = file_obj.df.copy(deep=False)
         file_obj.df = dfcp
         active_df.set(dfcp)
-
-        invalidate_file_selector('sel_files_export')
 
     # Manually flag/unflag data points via toggle
     def manual_flag() -> None:
@@ -1121,7 +1213,6 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         plot_against = input.sel_review_against()
         req(analyte and plot_against)
         reset_manual_flag_objects()
-        plot_state.reset_zoom()
 
     def emphasize_undo_button():
         asyncio.create_task(update_button_class('btn_undo_flag', 'btn-light', 'btn-warning'))
@@ -1146,7 +1237,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         test_setup_info.set(
             {
                 'x_columns': file_obj.date_cols,
-                'y_columns': file_obj.num_cols,
+                'y_columns': file_obj.get_analyte_names(),
                 'tests': od.OD_TESTS,
                 'is_long': is_long,
                 'analytes': file_obj.get_analytes() if is_long else [],

@@ -14,6 +14,89 @@ Shiny.addCustomMessageHandler('update_btn_class', function(data) {
     }
 });
 
+// ---- Review-tab plot ----
+// layout.uirevision (set in plot.py) keeps the user's zoom across updates.
+var reviewView = {last: null, timer: null};
+
+// Visible range in the units plot.py uses (dates as epoch ms); no x0/y0 = zoomed out
+function currentReviewView(gd) {
+    var xa = gd._fullLayout.xaxis;
+    var ya = gd._fullLayout.yaxis;
+    var view = {rev: String(gd.layout.uirevision)};
+    if (!xa.autorange) {
+        view.x0 = xa.r2l(xa.range[0]);
+        view.x1 = xa.r2l(xa.range[1]);
+    }
+    if (!ya.autorange) {
+        view.y0 = ya.r2l(ya.range[0]);
+        view.y1 = ya.r2l(ya.range[1]);
+    }
+    return view;
+}
+
+// Send the range only if it actually changed (selecting or switching tools
+// also fires relayout, and must not trigger a redraw)
+function sendReviewView(gd) {
+    var key = JSON.stringify(currentReviewView(gd));
+    if (key === reviewView.last) return;
+    reviewView.last = key;
+    Shiny.setInputValue('review_plot_view', JSON.parse(key));
+}
+
+Shiny.addCustomMessageHandler('review_plot', function(data) {
+    var el = document.getElementById('review_plot');
+    if (!el) return;
+
+    if (data.clear) {
+        Plotly.purge(el);
+        reviewView.last = null;
+        return;
+    }
+
+    var fig = JSON.parse(data.fig);
+
+    Plotly.react(el, fig.data, fig.layout, data.config).then(function(gd) {
+        // Remember the range just drawn, so the next non-zoom relayout
+        // (like finishing a box select) isn't mistaken for a zoom
+        reviewView.last = JSON.stringify(currentReviewView(gd));
+
+        // Plotly.react reuses the same div, so drop old listeners before adding new ones
+        gd.removeAllListeners('plotly_selected');
+        gd.removeAllListeners('plotly_deselect');
+        gd.removeAllListeners('plotly_relayout');
+
+        // Box/lasso select: send the row indices (stored in customdata) to the server
+        gd.on('plotly_selected', function(ev) {
+            var idx = (ev && ev.points ? ev.points : [])
+                .map(function(p) { return p.customdata; })
+                .filter(function(v) { return v != null; });
+            Shiny.setInputValue('review_plot_selected', idx, {priority: 'event'});
+        });
+
+        // Double-click clears the selection
+        gd.on('plotly_deselect', function() {
+            Shiny.setInputValue('review_plot_selected', [], {priority: 'event'});
+        });
+
+        // Zoom/pan: report the visible range once the user stops moving
+        gd.on('plotly_relayout', function() {
+            clearTimeout(reviewView.timer);
+            reviewView.timer = setTimeout(function() { sendReviewView(gd); }, 300);
+        });
+    });
+});
+
+// Esc: clear the selection and go back to pan mode
+document.addEventListener('keydown', function(event) {
+    if (event.key !== 'Escape') return;
+    var gd = document.getElementById('review_plot');
+    if (!gd || !gd._fullLayout) return;
+
+    Plotly.relayout(gd, {dragmode: 'pan', selections: []});
+    Plotly.restyle(gd, {selectedpoints: [null]});
+    Shiny.setInputValue('review_plot_selected', [], {priority: 'event'});
+});
+
 // Set up keyboard shortcuts
 document.addEventListener('keydown', function(event) {
     if (event.ctrlKey && event.key === 'z') {

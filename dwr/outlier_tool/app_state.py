@@ -34,6 +34,7 @@ class File:
         self.last_selected_y_col = None
         self.od_results = {}  # (analyte, test_key) -> result entry
         self.manual_flags = {}  # analyte -> set of row indices
+        self.analyte_cols = None
         self.flag_overrides = {}
         self.is_long = False
         self.analyte_col = None
@@ -81,7 +82,12 @@ class File:
                 continue
             # Inconsistent data can throw this operation off
             try:
-                self.df[col] = pd.to_datetime(self.df[col], format='mixed')
+                try:
+                    # Fast path: pandas infers one format from the first value
+                    self.df[col] = pd.to_datetime(self.df[col])
+                except (ValueError, TypeError):
+                    # Slow path: values use different formats, parse each one separately
+                    self.df[col] = pd.to_datetime(self.df[col], format='mixed')
             except TypeError as e:
                 print(e)
                 # TODO: get this info back to the user
@@ -105,6 +111,9 @@ class File:
         """Analytes available for testing, however the file happens to be shaped."""
         if self.is_long:
             return self.get_analytes()
+        # Wide: the columns the user chose on the format tab, once confirmed
+        if self.analyte_cols is not None:
+            return list(self.analyte_cols)
         return list(self.num_cols)
 
     def get_analyte_mask(self, analyte: str) -> pd.Series:

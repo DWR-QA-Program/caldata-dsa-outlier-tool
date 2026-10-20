@@ -1,7 +1,7 @@
 import shinyswatch
 from htmltools import tags
 from shiny import ui
-from shinywidgets import output_widget
+from plotly.offline import get_plotlyjs_version
 
 from . import m, schema, text, upload_util, util
 
@@ -61,7 +61,7 @@ def _analyte_selects(
                 ),
                 cols,
                 selected=upload_util.guess_col(
-                    cols,
+                    numeric_cols,
                     ('value', 'result', 'concentration', 'conc', 'reading'),
                 ),
             ),
@@ -73,7 +73,7 @@ def _analyte_selects(
             'Analyte column(s):',
             class_='fw-semibold',
         ),
-        cols,
+        numeric_cols,
         selected=numeric_cols,
         multiple=True,
     )
@@ -207,7 +207,10 @@ app_ui = ui.page_sidebar(
         open='closed',
         title='Appearance',
     ),
-    ui.head_content(tags.link(rel='icon', href=m.FAVICON_URL, type='image/x-icon')),
+    ui.head_content(
+        tags.link(rel='icon', href=m.FAVICON_URL, type='image/x-icon'),
+        tags.script(src=f'https://cdn.plot.ly/plotly-{get_plotlyjs_version()}.min.js'),
+    ),
     ui.navset_pill(
         ui.nav_panel(
             'Home',
@@ -439,8 +442,9 @@ app_ui = ui.page_sidebar(
                     ui.div(
                         ui.output_ui('review_plot_title'),
                         ui.output_ui('review_match_message'),
+                        ui.output_ui('review_plot_status'),
                         ui.div(
-                            output_widget('plot_data'),
+                            ui.div(id='review_plot', style='width: 100%; height: 560px;'),
                             style=(
                                 'border: 1px solid #dee2e6; '
                                 'border-radius: 6px; '
@@ -491,10 +495,6 @@ app_ui = ui.page_sidebar(
                 ),
                 ui.layout_sidebar(
                     ui.sidebar(
-                        ui.div(
-                            'Export Settings',
-                            class_='h5 border-bottom pb-2 mb-1',
-                        ),
                         ui.input_select(
                             'sel_export_format',
                             'File format:',
@@ -520,14 +520,7 @@ app_ui = ui.page_sidebar(
                         width=380,
                         open='always',
                     ),
-                    ui.div(
-                        ui.div(
-                            'Export Preview',
-                            class_='h5 border-bottom pb-2 mb-3',
-                        ),
-                        ui.output_data_frame('export_table'),
-                        style='margin-top: -4px;',
-                    ),
+                    ui.output_data_frame('export_table'),
                 ),
                 fill=False,
                 class_='mb-3',
