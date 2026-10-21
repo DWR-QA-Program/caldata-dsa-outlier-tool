@@ -1,7 +1,7 @@
 import shinyswatch
 from htmltools import tags
-from shiny import ui
 from plotly.offline import get_plotlyjs_version
+from shiny import ui
 
 from . import m, schema, text, upload_util, util
 

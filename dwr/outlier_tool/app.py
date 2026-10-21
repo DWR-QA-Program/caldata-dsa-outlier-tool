@@ -109,8 +109,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
         if len(assigned_cols) != len(set(assigned_cols)):
             util.show_error(
-                'Each column can only be assigned one role. '
-                'Choose different columns for station, date, and analyte fields.'
+                'Each column can only be assigned one role.'
             )
             return
 
