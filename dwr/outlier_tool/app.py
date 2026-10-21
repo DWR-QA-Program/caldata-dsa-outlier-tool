@@ -767,7 +767,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
     @reactive.calc
     def export_df():
         req(selected_file := input.sel_files_export())
-        active_df()   # re-run when flags change
+        active_df()  # re-run when flags change
         results_df()  # re-run when tests finish
         return get_export_df(user_state().get_file(selected_file))
 
@@ -1084,8 +1084,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
         if points and status and status['sampled']:
             util.show_warning(
-                'Some passing points may be hidden at this zoom level. '
-                'Zoom in further to select them all.'
+                'Some passing points may be hidden at this zoom level. Zoom in further to select them all.'
             )
 
     # Manual flags and overrides live on the File, not as columns, so writing them
@@ -1432,6 +1431,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         df = export_df()
 
         if selected_ext == '.xlsx':
+
             def to_xlsx():
                 buffer = BytesIO()
                 df.to_excel(buffer, index=False, header=header)
@@ -1443,7 +1443,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         # Stream CSV in slices so bytes start flowing immediately
         rows_per_chunk = 50_000
         for start in range(0, len(df), rows_per_chunk):
-            chunk = df.iloc[start:start + rows_per_chunk]
+            chunk = df.iloc[start : start + rows_per_chunk]
             yield chunk.to_csv(index=False, header=header and start == 0)
             await asyncio.sleep(0)
 
@@ -1462,8 +1462,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
 
         if n_rows > m.EXCEL_WARN_ROWS:
             return ui.p(
-                f'This file has {n_rows:,} rows. Excel export may take a while; '
-                'CSV is much faster.',
+                f'This file has {n_rows:,} rows. Excel export may take a while; CSV is much faster.',
                 class_='text-warning small',
             )
 
