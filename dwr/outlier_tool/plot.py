@@ -57,6 +57,7 @@ PLOT_CONFIG = {
     ],
 }
 
+
 # to help plot points look better
 def hex_to_rgba(hex_color, alpha):
     hex_color = hex_color.lstrip('#')

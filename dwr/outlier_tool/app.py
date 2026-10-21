@@ -108,9 +108,7 @@ def server(input: Inputs, output: Outputs, session: Session):  # noqa: PLR0915
         assigned_cols = [col for col in assigned_cols if col]
 
         if len(assigned_cols) != len(set(assigned_cols)):
-            util.show_error(
-                'Each column can only be assigned one role.'
-            )
+            util.show_error('Each column can only be assigned one role.')
             return
 
         format_info = {
